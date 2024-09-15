@@ -44,7 +44,7 @@ class SerialPlotterWindow(QMainWindow):
 
         self.serial_port = QSerialPort()
         self.serial_port.setPortName("/dev/ttyACM0")  # Adjust to your serial port
-        self.serial_port.setBaudRate(115200)
+        self.serial_port.setBaudRate(1000000)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
         # Create text edit for live serial data
@@ -96,11 +96,14 @@ class SerialPlotterWindow(QMainWindow):
                 # Update text edit with new serial data
                 self.serial_text_edit.append(data)
 
+                scaling_factor = 256
+                gravity = 9.8067
+
                 if len(values) == 5:
                     accel_id = int(values[0])
-                    x_accel = float(values[2])
-                    y_accel = float(values[3])
-                    z_accel = float(values[4])
+                    x_accel = (float(values[2])/scaling_factor)*gravity
+                    y_accel = (float(values[3])/scaling_factor)*gravity
+                    z_accel = (float(values[4])/scaling_factor)*gravity
 
                     if accel_id == 1:
                         self.update_plot(0, x_accel, 0, 0)  # Plot X for Sensor 1
