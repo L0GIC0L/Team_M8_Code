@@ -93,7 +93,6 @@ void setup(void)
 }
 
 void loop(void) {
-  int loop = 0;
 
   // Collect data 10 times
   for (int loop = 0; loop < bufferscale; loop++) {
