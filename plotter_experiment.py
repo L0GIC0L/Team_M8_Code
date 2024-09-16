@@ -1,255 +1,113 @@
-import sys
-import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, QFileDialog, QComboBox, QTextEdit
-from PyQt5.QtSerialPort import QSerialPort
-import pyqtgraph as pg
-import csv
-import signal
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL343.h>
 
-class CircularBuffer:
-    def __init__(self, capacity):
-        self.capacity = capacity
-        self.buffer = np.zeros(capacity)
-        self.index = 0
-        self.full = False
+#define ADXL343_SCK 13
+#define ADXL343_MISO 12
+#define ADXL343_MOSI 11
+#define ADXL343_CS 53
+#define ADXL343_CS2 40
 
-    def push(self, value):
-        self.buffer[self.index] = value
-        self.index = (self.index + 1) % self.capacity
-        if self.index == 0:
-            self.full = True
+//Adafruit_ADXL343 accel = Adafruit_ADXL343(ADXL343_SCK, ADXL343_MISO, ADXL343_MOSI, ADXL343_CS, 12345);
 
-    def get_data(self):
-        if self.full:
-            return np.concatenate((self.buffer[self.index:], self.buffer[:self.index]))
-        else:
-            return self.buffer[:self.index]
+Adafruit_ADXL343 accel = Adafruit_ADXL343(ADXL343_CS, &SPI, 12345);
+Adafruit_ADXL343 accel2 = Adafruit_ADXL343(ADXL343_CS2, &SPI, 12345);
 
-class SerialPlotterWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+const int bufferscale = 10;
+int16_t x4[bufferscale], y4[bufferscale], z4[bufferscale];
+int16_t x3[bufferscale], y3[bufferscale], z3[bufferscale];
+unsigned long time1[bufferscale];  // Use unsigned long for timestamp storage
+unsigned long time2[bufferscale];  // Use unsigned long for timestamp storage
 
-        self.setWindowTitle("Real-Time Accelerometer Viewer")
-        self.setGeometry(100, 100, 1200, 600)
+void displayRange(void)
+{
+  Serial.print("Range:         +/- ");
+  switch(accel.getRange())
+  {
+    case ADXL343_RANGE_16_G: Serial.print("16 "); break;
+    case ADXL343_RANGE_8_G: Serial.print("8 "); break;
+    case ADXL343_RANGE_4_G: Serial.print("4 "); break;
+    case ADXL343_RANGE_2_G: Serial.print("2 "); break;
+    default: Serial.print("?? "); break;
+  }
+  Serial.println(" g");
+}
 
-        self.layout = QGridLayout()
+void displayDataRate(void)
+{
+  Serial.print("Data Rate:    ");
+  switch(accel.getDataRate())
+  {
+    case ADXL343_DATARATE_3200_HZ: Serial.print("3200 "); break;
+    case ADXL343_DATARATE_1600_HZ: Serial.print("1600 "); break;
+    case ADXL343_DATARATE_800_HZ: Serial.print("800 "); break;
+    case ADXL343_DATARATE_400_HZ: Serial.print("400 "); break;
+    case ADXL343_DATARATE_200_HZ: Serial.print("200 "); break;
+    case ADXL343_DATARATE_100_HZ: Serial.print("100 "); break;
+    case ADXL343_DATARATE_50_HZ: Serial.print("50 "); break;
+    case ADXL343_DATARATE_25_HZ: Serial.print("25 "); break;
+    case ADXL343_DATARATE_12_5_HZ: Serial.print("12.5 "); break;
+    case ADXL343_DATARATE_6_25HZ: Serial.print("6.25 "); break;
+    case ADXL343_DATARATE_3_13_HZ: Serial.print("3.13 "); break;
+    case ADXL343_DATARATE_1_56_HZ: Serial.print("1.56 "); break;
+    case ADXL343_DATARATE_0_78_HZ: Serial.print("0.78 "); break;
+    case ADXL343_DATARATE_0_39_HZ: Serial.print("0.39 "); break;
+    case ADXL343_DATARATE_0_20_HZ: Serial.print("0.20 "); break;
+    case ADXL343_DATARATE_0_10_HZ: Serial.print("0.10 "); break;
+    default: Serial.print("???? "); break;
+  }
+  Serial.println(" Hz");
+}
 
-        self.graph_widgets = []
-        self.data_buffers = []
-        self.plot_data_items = []
-        self.data_records = []
+const uint8_t ACCEL1_ID = 1;
+const uint8_t ACCEL2_ID = 2;
 
-        self.buffer_sizes = [1000, 3000, 5000, 7000, 10000]
-        self.buffer_capacity = self.buffer_sizes[0]
+void setup(void)
+{
+  Serial.begin(1000000);
+  while (!Serial);
+  Serial.println("Accelerometer Test"); Serial.println("");
 
-        self.serial_port = QSerialPort()
-        self.serial_port.setPortName("/dev/ttyACM0")  # Adjust to your serial port
-        self.serial_port.setBaudRate(1000000)
-        self.serial_port.readyRead.connect(self.receive_serial_data)
-
-        # Create text edit for live serial data
-        self.serial_text_edit = QTextEdit()
-        self.serial_text_edit.setReadOnly(True)
-        self.layout.addWidget(self.serial_text_edit, 0, 3, 3, 1)  # Add it to the right side of the layout
-
-    def add_graph(self, name, x_label, y_label, row, col, color, is_live=False):
-        # Create the graph widget
-        graph_widget = pg.PlotWidget()
-        graph_widget.setBackground("#333333")
-        graph_widget.showGrid(True, True)
-        graph_widget.setLabel("left", y_label)
-        graph_widget.setLabel("bottom", x_label)
-        graph_widget.setMouseEnabled(x=True, y=False)
-        graph_widget.setClipToView(True)
-
-        # Create a container widget for the graph with a layout
-        graph_widget_container = QWidget()
-        graph_widget_layout = QVBoxLayout()
-        graph_widget_layout.addWidget(graph_widget)
-        graph_widget_container.setLayout(graph_widget_layout)
-
-        # Apply rounded corners to the graph container using a stylesheet
-        graph_widget_container.setStyleSheet("""
-            QWidget {
-                border-radius: 10px;  /* Rounded corners */
-                background-color: #333333;
-            }
-        """)
-
-        # Add the container to the main layout
-        self.layout.addWidget(graph_widget_container, row, col)
-
-        # Data buffer and plot item setup
-        data_buffer = CircularBuffer(self.buffer_capacity)
-        plot_data_item = graph_widget.plot(data_buffer.get_data(), pen=pg.mkPen(color, width=1))
-
-        self.data_buffers.append(data_buffer)
-        self.plot_data_items.append(plot_data_item)
+  if(!accel.begin())
+  {
+    Serial.println("Ooops, no ADXL343 detected ... Check your wiring!");
+    while(1);
+  }
 
 
-    def receive_serial_data(self):
-        while self.serial_port.canReadLine():
-            try:
-                data = self.serial_port.readLine().data().decode("utf-8").strip()
-                values = data.split()
+  if(!accel2.begin())
+  {
+    Serial.println("RUN!");
+    while(1);
+  }
 
-                # Update text edit with new serial data
-                self.serial_text_edit.append(data)
+  accel.setRange(ADXL343_RANGE_16_G);
+  accel.setDataRate(ADXL343_DATARATE_3200_HZ);
 
-                scaling_factor = 256
-                gravity = 9.8067
+  accel2.setRange(ADXL343_RANGE_16_G);
+  accel2.setDataRate(ADXL343_DATARATE_3200_HZ);
 
-                if len(values) == 5:
-                    accel_id = int(values[0])
-                    x_accel = (float(values[2])/scaling_factor)*gravity
-                    y_accel = (float(values[3])/scaling_factor)*gravity
-                    z_accel = (float(values[4])/scaling_factor)*gravity
+  accel.printSensorDetails();
+  displayDataRate();
+  displayRange();
+  Serial.println("");
+}
 
-                    if accel_id == 1:
-                        self.update_plot(0, x_accel, 0, 0)  # Plot X for Sensor 1
-                        self.update_plot(1, 0, y_accel, 0, is_y_data=True)  # Plot Y for Sensor 1 on bottom graph
-                        self.update_plot(2, 0, 0, z_accel, is_y_data=False, is_z_data=True)# Plot Z for Sensor 2 on bottom graph
+void loop(void) {
+  int loop = 0;
 
-                    elif accel_id == 2:
-                        self.update_plot(3, x_accel, 0, 0)  # Plot X for Sensor 2
-                        self.update_plot(4, 0, y_accel, 0, is_y_data=True)
-                        self.update_plot(5, 0, 0, z_accel, is_y_data=False, is_z_data=True)# Plot Z for Sensor 2 on bottom graph
-                    elif accel_id == 3:
-                        self.update_plot(2, x_accel, y_accel, z_accel)  # Plot X for Sensor 3
-                    elif accel_id == 4:
-                        self.update_plot(3, x_accel, y_accel, z_accel)  # Plot X for Sensor 4
+  // Collect data 10 times
+  for (int loop = 0; loop < bufferscale; loop++) {
+    accel.getXYZ(x3[loop], y3[loop], z3[loop]);
+    time1[loop] = micros();  // Capture timestamp for each reading
+    accel2.getXYZ(x4[loop], y4[loop], z4[loop]);
+    time2[loop] = micros();  // Capture timestamp for each reading
+  }
 
-                    self.data_records.append([accel_id, x_accel, y_accel, z_accel])
+  String output = "";
+  for (int i = 0; i < bufferscale; i++) {
+    output += "1 " + String(time1[i]) + " " + x3[i] + " " +y3[i] + " " + z3[i] + "\n" + "2 " + String(time2[i]) + " " + x4[i] + " " + y4[i] + " " + z4[i] + "\n";
+  }
 
-            except (UnicodeDecodeError, IndexError, ValueError) as e:
-                print(f"Error processing data: {e}")
+  Serial.println(output);
 
-    def update_plot(self, index, x, y, z, is_y_data=False, is_z_data=False):
-        if index < len(self.data_buffers):
-            if is_y_data:
-                # Use Y acceleration data for specific plots
-                self.data_buffers[index].push(y)
-            elif is_z_data:
-                # Use Z acceleration data for specific plots
-                self.data_buffers[index].push(z)
-            else:
-                # Use X acceleration data for default plots
-                self.data_buffers[index].push(x)
-            self.plot_data_items[index].setData(self.data_buffers[index].get_data())
-
-    def export_data(self):
-        if len(self.data_records) > 0:
-            filename, _ = QFileDialog.getSaveFileName(
-                self, "Export Data", "", "CSV Files (*.csv)")
-            if filename:
-                try:
-                    with open(filename, "w", newline="") as file:
-                        writer = csv.writer(file)
-                        writer.writerow(["Accelerometer ID", "X Acceleration", "Y Acceleration", "Z Acceleration"])
-                        writer.writerows(self.data_records)
-                    QMessageBox.information(
-                        self, "Export Success", "Data exported successfully.")
-                except Exception:
-                    QMessageBox.warning(
-                        self, "Export Error", "Failed to export data.")
-            else:
-                QMessageBox.warning(self, "Export Error", "Invalid filename.")
-        else:
-            QMessageBox.warning(self, "Export Error", "No data to export.")
-
-    def change_buffer_size(self, index):
-        self.buffer_capacity = self.buffer_sizes[index]
-        self.data_buffers = [CircularBuffer(self.buffer_capacity) for _ in range(len(self.data_buffers))]
-
-    def closeEvent(self, event):
-        self.serial_port.close()
-        event.accept()
-
-def keyboard_interrupt_handler(signal, frame):
-    sys.exit(0)
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-
-    signal.signal(signal.SIGINT, keyboard_interrupt_handler)
-
-    app.setStyleSheet("""
-        QMainWindow {
-            background-color: #252525;
-        }
-
-        QPushButton {
-            background-color: #cc6604;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 10px;  /* Rounded corners */
-        }
-
-        QPushButton:hover {
-            background-color: #5e4125;
-            cursor: pointer;
-        }
-
-        QLabel {
-            font-size: 12px;
-            font-weight: bold;
-            border-radius: 5px;  /* Optional if you want rounded labels */
-        }
-
-        QComboBox {
-            padding: 4px;
-            font-size: 12px;
-            # border-radius: 5px;  /* Rounded corners */
-        }
-
-        QTextEdit {
-            background-color: #1e1e1e;
-            color: white;
-            font-size: 12px;
-            border-radius: 10px;  /* Rounded corners */
-        }
-
-        QLineEdit {
-            background-color: #1e1e1e;
-            color: white;
-            border-radius: 10px;  /* Rounded corners */
-        }
-
-        QWidget {
-            # border-radius: 10px;  /* General rounded corners for QWidget */
-        }
-    """)
-
-
-
-    plotter_window = SerialPlotterWindow()
-    plotter_window.add_graph("Accel 1 X", "Time", "X Acceleration", 0, 0, "r")
-    plotter_window.add_graph("Accel 1 Y", "Time", "Y Acceleration", 0, 1, "g")
-    plotter_window.add_graph("Accel 1 Z", "Time", "Z Acceleration", 0, 2, "y")
-    
-    plotter_window.add_graph("Accel 2 X", "Time", "X Acceleration", 1, 0, "r")
-    plotter_window.add_graph("Accel 2 Y", "Time", "Y Acceleration", 1, 1, "g")
-    plotter_window.add_graph("Accel 2 Z", "Time", "Z Acceleration", 1, 2, "y")
-
-    buffer_size_combo = QComboBox()
-    buffer_size_combo.addItems([str(size) for size in plotter_window.buffer_sizes])
-    buffer_size_combo.setCurrentIndex(0)
-    buffer_size_combo.currentIndexChanged.connect(plotter_window.change_buffer_size)
-    plotter_window.layout.addWidget(buffer_size_combo, 2, 0, 1, 1)
-
-    export_button = QPushButton("Export Data")
-    export_button.clicked.connect(plotter_window.export_data)
-    plotter_window.layout.addWidget(export_button, 2, 1, 1, 1)
-
-    if plotter_window.serial_port.open(QSerialPort.ReadWrite):
-        main_widget = QWidget()
-        main_widget.setLayout(plotter_window.layout)
-        plotter_window.setCentralWidget(main_widget)
-        plotter_window.show()
-        sys.exit(app.exec_())
-    else:
-        print("Failed to open serial port.")
-        sys.exit(1)
+}
