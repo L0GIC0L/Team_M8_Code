@@ -1,12 +1,15 @@
-import sys
-import os
-import numpy as np
-from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, QFileDialog, QComboBox, QTextEdit
-from PyQt6.QtSerialPort import QSerialPort
-from PyQt6.QtCore import QIODevice
-import pyqtgraph as pg
 import csv
+import os
 import signal
+import sys
+
+import numpy as np
+import pyqtgraph as pg
+from PyQt6.QtCore import QIODevice
+from PyQt6.QtSerialPort import QSerialPort
+from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
+    QFileDialog, QComboBox, QTextEdit
+
 
 class CircularBuffer:
     def __init__(self, capacity):
@@ -26,6 +29,7 @@ class CircularBuffer:
             return np.concatenate((self.buffer[self.index:], self.buffer[:self.index]))
         else:
             return self.buffer[:self.index]
+
 
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
@@ -88,7 +92,6 @@ class SerialPlotterWindow(QMainWindow):
         self.data_buffers.append(data_buffer)
         self.plot_data_items.append(plot_data_item)
 
-
     def receive_serial_data(self):
         while self.serial_port.canReadLine():
             try:
@@ -103,19 +106,21 @@ class SerialPlotterWindow(QMainWindow):
 
                 if len(values) == 5:
                     accel_id = int(values[0])
-                    x_accel = (float(values[2])/scaling_factor)*gravity
-                    y_accel = (float(values[3])/scaling_factor)*gravity
-                    z_accel = (float(values[4])/scaling_factor)*gravity
+                    x_accel = (float(values[2]) / scaling_factor) * gravity
+                    y_accel = (float(values[3]) / scaling_factor) * gravity
+                    z_accel = (float(values[4]) / scaling_factor) * gravity
 
                     if accel_id == 1:
                         self.update_plot(0, x_accel, 0, 0)  # Plot X for Sensor 1
                         self.update_plot(1, 0, y_accel, 0, is_y_data=True)  # Plot Y for Sensor 1 on bottom graph
-                        self.update_plot(2, 0, 0, z_accel, is_y_data=False, is_z_data=True)# Plot Z for Sensor 2 on bottom graph
+                        self.update_plot(2, 0, 0, z_accel, is_y_data=False,
+                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
 
                     elif accel_id == 2:
                         self.update_plot(3, x_accel, 0, 0)  # Plot X for Sensor 2
                         self.update_plot(4, 0, y_accel, 0, is_y_data=True)
-                        self.update_plot(5, 0, 0, z_accel, is_y_data=False, is_z_data=True)# Plot Z for Sensor 2 on bottom graph
+                        self.update_plot(5, 0, 0, z_accel, is_y_data=False,
+                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
                     elif accel_id == 3:
                         self.update_plot(2, x_accel, y_accel, z_accel)  # Plot X for Sensor 3
                     elif accel_id == 4:
@@ -167,8 +172,10 @@ class SerialPlotterWindow(QMainWindow):
         self.serial_port.close()
         event.accept()
 
+
 def keyboard_interrupt_handler(signal, frame):
     sys.exit(0)
+
 
 def load_stylesheet(app):
     # Get the absolute path of the stylesheet file
@@ -177,6 +184,7 @@ def load_stylesheet(app):
     # Read the content of the stylesheet
     with open(style_file, "r") as f:
         app.setStyleSheet(f.read())
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
@@ -205,17 +213,12 @@ if __name__ == "__main__":
     export_button.clicked.connect(plotter_window.export_data)
     plotter_window.layout.addWidget(export_button, 2, 1, 1, 1)
 
-    if plotter_window.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
-        main_widget = QWidget()
-        main_widget.setLayout(plotter_window.layout)
-        plotter_window.setCentralWidget(main_widget)
-        plotter_window.show()
-        sys.exit(app.exec())
-    else:
+    main_widget = QWidget()
+    main_widget.setLayout(plotter_window.layout)
+    plotter_window.setCentralWidget(main_widget)
+    plotter_window.show()
+    sys.exit(app.exec())
+
+    if not plotter_window.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
         print("Failed to open serial port.")
-        main_widget = QWidget()
-        main_widget.setLayout(plotter_window.layout)
-        plotter_window.setCentralWidget(main_widget)
-        plotter_window.show()
-        sys.exit(app.exec())
-        #sys.exit(1)
+        # sys.exit(1)
