@@ -1,0 +1,47 @@
+QMainWindow {
+    background-color: #252525;
+}
+
+QPushButton {
+    background-color: #cc6604;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    border-radius: 10px;  /* Rounded corners */
+}
+
+QPushButton:hover {
+    background-color: #5e4125;
+    cursor: pointer;
+}
+
+QLabel {
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 5px;  /* Optional if you want rounded labels */
+}
+
+QComboBox {
+    padding: 4px;
+    font-size: 12px;
+    /* border-radius: 5px;  /* Rounded corners */
+}
+
+QTextEdit {
+    background-color: #1e1e1e;
+    color: white;
+    font-size: 12px;
+    border-radius: 10px;  /* Rounded corners */
+}
+
+QLineEdit {
+    background-color: #1e1e1e;
+    color: white;
+    border-radius: 10px;
+}
+
+QWidget {
+    /* border-radius: 10px; */
+}
