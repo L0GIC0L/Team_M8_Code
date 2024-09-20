@@ -5,10 +5,11 @@ import sys
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6.QtCore import QIODevice
+from PyQt6.QtCore import QIODevice, Qt
 from PyQt6.QtSerialPort import QSerialPort
 from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
-    QFileDialog, QComboBox, QTextEdit
+    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect
+from PyQt6.QtGui import QPalette, QColor
 
 
 class CircularBuffer:
@@ -30,7 +31,6 @@ class CircularBuffer:
         else:
             return self.buffer[:self.index]
 
-
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -38,7 +38,10 @@ class SerialPlotterWindow(QMainWindow):
         self.setWindowTitle("Real-Time Accelerometer Viewer")
         self.setGeometry(100, 100, 1200, 600)
 
-        self.layout = QGridLayout()
+        self.tab_widget = QTabWidget()  # Create a tab widget
+
+        self.plot_tab = QWidget()
+        self.plot_layout = QGridLayout()
 
         self.graph_widgets = []
         self.data_buffers = []
@@ -56,12 +59,40 @@ class SerialPlotterWindow(QMainWindow):
         # Create text edit for live serial data
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
-        self.layout.addWidget(self.serial_text_edit, 0, 3, 3, 1)  # Add it to the right side of the layout
+        self.plot_layout.addWidget(self.serial_text_edit, 0, 3, 3, 1)  # Add it to the right side of the layout
+
+        # Add the buffer size combo and export button to the layout
+        buffer_size_combo = QComboBox()
+        buffer_size_combo.addItems([str(size) for size in self.buffer_sizes])
+        buffer_size_combo.setCurrentIndex(0)
+        buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
+        self.plot_layout.addWidget(buffer_size_combo, 2, 0, 1, 1)
+
+        export_button = QPushButton("Export Data")
+        export_button.clicked.connect(self.export_data)
+        self.plot_layout.addWidget(export_button, 2, 1, 1, 1)
+
+        # Set up the plotting tab's layout and add to tab widget
+        self.plot_tab.setLayout(self.plot_layout)
+        self.tab_widget.addTab(self.plot_tab, "Plot Data")  # Add Plot tab
+
+        # Create another tab for additional settings or information
+        self.settings_tab = QWidget()
+        self.settings_layout = QVBoxLayout()
+        self.settings_text = QTextEdit("Settings or additional information can go here.")
+        self.settings_layout.addWidget(self.settings_text)
+        self.settings_tab.setLayout(self.settings_layout)
+
+        # Add the settings tab to the tab widget
+        self.tab_widget.addTab(self.settings_tab, "Settings")
+
+        # Set the tab widget as the central widget of the main window
+        self.setCentralWidget(self.tab_widget)
 
     def add_graph(self, name, x_label, y_label, row, col, color, is_live=False):
         # Create the graph widget
         graph_widget = pg.PlotWidget()
-        graph_widget.setBackground("#333333")
+        graph_widget.setBackground("#2b2b2b")
         graph_widget.showGrid(True, True)
         graph_widget.setLabel("left", y_label)
         graph_widget.setLabel("bottom", x_label)
@@ -78,12 +109,12 @@ class SerialPlotterWindow(QMainWindow):
         graph_widget_container.setStyleSheet("""
             QWidget {
                 border-radius: 10px;  /* Rounded corners */
-                background-color: #333333;
+                background-color: #2b2b2b;
             }
         """)
 
         # Add the container to the main layout
-        self.layout.addWidget(graph_widget_container, row, col)
+        self.plot_layout.addWidget(graph_widget_container, row, col)
 
         # Data buffer and plot item setup
         data_buffer = CircularBuffer(self.buffer_capacity)
@@ -185,7 +216,6 @@ def load_stylesheet(app):
     with open(style_file, "r") as f:
         app.setStyleSheet(f.read())
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
@@ -203,22 +233,9 @@ if __name__ == "__main__":
     plotter_window.add_graph("Accel 2 Y", "Time", "Y Acceleration", 1, 1, "g")
     plotter_window.add_graph("Accel 2 Z", "Time", "Z Acceleration", 1, 2, "y")
 
-    buffer_size_combo = QComboBox()
-    buffer_size_combo.addItems([str(size) for size in plotter_window.buffer_sizes])
-    buffer_size_combo.setCurrentIndex(0)
-    buffer_size_combo.currentIndexChanged.connect(plotter_window.change_buffer_size)
-    plotter_window.layout.addWidget(buffer_size_combo, 2, 0, 1, 1)
-
-    export_button = QPushButton("Export Data")
-    export_button.clicked.connect(plotter_window.export_data)
-    plotter_window.layout.addWidget(export_button, 2, 1, 1, 1)
-
-    main_widget = QWidget()
-    main_widget.setLayout(plotter_window.layout)
-    plotter_window.setCentralWidget(main_widget)
-    plotter_window.show()
-    sys.exit(app.exec())
-
     if not plotter_window.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
         print("Failed to open serial port.")
         # sys.exit(1)
+
+    plotter_window.show()
+    sys.exit(app.exec())
