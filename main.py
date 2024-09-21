@@ -51,15 +51,18 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_sizes = [1000, 3000, 5000, 7000, 10000]
         self.buffer_capacity = self.buffer_sizes[0]
 
+        self.serial_ports = ["/dev/ttyACM0", "COM0", "COM1", "COM2", "COM3"]
+        self.current_port_index = 1  # Default to the second port in the list
+
         self.serial_port = QSerialPort()
-        self.serial_port.setPortName("/dev/ttyACM0")  # Adjust to your serial port
+        self.serial_port.setPortName(self.serial_ports[self.current_port_index])
         self.serial_port.setBaudRate(1000000)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
         # Create text edit for live serial data
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
-        self.plot_layout.addWidget(self.serial_text_edit, 0, 3, 3, 1)  # Add it to the right side of the layout
+        self.plot_layout.addWidget(self.serial_text_edit, 0, 3, 4, 1)  # Add it to the right side of the layout
 
         # Add the buffer size combo and export button to the layout
         buffer_size_combo = QComboBox()
@@ -68,9 +71,20 @@ class SerialPlotterWindow(QMainWindow):
         buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
         self.plot_layout.addWidget(buffer_size_combo, 2, 0, 1, 1)
 
+        # Add the buffer size combo and export button to the layout
+        self.serial_port_combo = QComboBox()
+        self.serial_port_combo.addItems(self.serial_ports)
+        self.serial_port_combo.setCurrentIndex(self.current_port_index)
+        self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
+        self.plot_layout.addWidget(self.serial_port_combo, 3, 0, 1, 1)
+
         export_button = QPushButton("Export Data")
         export_button.clicked.connect(self.export_data)
         self.plot_layout.addWidget(export_button, 2, 1, 1, 1)
+
+        self.reconnect_button = QPushButton("Reconnect")
+        self.reconnect_button.clicked.connect(self.reconnect_serial_port)
+        self.plot_layout.addWidget(self.reconnect_button, 3, 1, 1, 1)
 
         # Set up the plotting tab's layout and add to tab widget
         self.plot_tab.setLayout(self.plot_layout)
@@ -85,6 +99,26 @@ class SerialPlotterWindow(QMainWindow):
 
         # Add the settings tab to the tab widget
         self.tab_widget.addTab(self.settings_tab, "Settings")
+
+        # Create another tab for additional settings or information
+        self.frequency_tab = QWidget()
+        self.frequency_layout = QVBoxLayout()
+        self.frequency_text = QTextEdit("Placeholder Text")
+        self.frequency_layout.addWidget(self.frequency_text)
+        self.frequency_tab.setLayout(self.frequency_layout)
+
+        # Add the settings tab to the tab widget
+        self.tab_widget.addTab(self.frequency_tab, "Frequency Graph")
+
+        # Create another tab for additional settings or information
+        self.analysis_tab = QWidget()
+        self.analysis_layout = QVBoxLayout()
+        self.analysis_text = QTextEdit("Placeholder Text")
+        self.analysis_layout.addWidget(self.analysis_text)
+        self.analysis_tab.setLayout(self.analysis_layout)
+
+        # Add the settings tab to the tab widget
+        self.tab_widget.addTab(self.analysis_tab, "Analysis")
 
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
@@ -199,8 +233,26 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_capacity = self.buffer_sizes[index]
         self.data_buffers = [CircularBuffer(self.buffer_capacity) for _ in range(len(self.data_buffers))]
 
+    def change_serial_port(self, index):
+        self.current_port_index = index
+        self.reconnect_serial_port()
+
+    def reconnect_serial_port(self):
+        if self.serial_port.isOpen():
+            self.serial_port.close()
+
+        self.serial_port.setPortName(self.serial_ports[self.current_port_index])
+
+        if self.serial_port.open(QSerialPort.OpenModeFlag.ReadWrite):
+            print(f"Successfully connected to {self.serial_ports[self.current_port_index]}")
+        else:
+            print(f"Failed to connect to {self.serial_ports[self.current_port_index]}")
+            QMessageBox.warning(self, "Connection Error",
+                                f"Failed to connect to {self.serial_ports[self.current_port_index]}")
+
     def closeEvent(self, event):
-        self.serial_port.close()
+        if self.serial_port.isOpen():
+            self.serial_port.close()
         event.accept()
 
 
@@ -233,9 +285,13 @@ if __name__ == "__main__":
     plotter_window.add_graph("Accel 2 Y", "Time", "Y Acceleration", 1, 1, "g")
     plotter_window.add_graph("Accel 2 Z", "Time", "Z Acceleration", 1, 2, "y")
 
-    if not plotter_window.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
-        print("Failed to open serial port.")
-        # sys.exit(1)
+    # Try to open the serial port
+    if not plotter_window.serial_port.open(QSerialPort.OpenModeFlag.ReadWrite):
+        print(f"Failed to open serial port: {plotter_window.serial_port.errorString()}")
+        QMessageBox.critical(plotter_window, "Serial Port Error",
+                             f"Failed to open serial port: {plotter_window.serial_port.errorString()}\n"
+                             "The application will continue running, but you may need to reconnect manually.")
+        # Note: We're not exiting the application here, allowing for manual reconnection
 
     plotter_window.show()
     sys.exit(app.exec())
