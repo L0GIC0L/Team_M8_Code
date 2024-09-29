@@ -48,15 +48,15 @@ class SerialPlotterWindow(QMainWindow):
         self.plot_data_items = []
         self.data_records = []
 
-        self.buffer_sizes = [1000, 3000, 5000, 7000, 10000]
+        self.buffer_sizes = [1000, 3000, 5000, 7000, 10000,17500,30000]
         self.buffer_capacity = self.buffer_sizes[0]
 
-        self.serial_ports = ["/dev/ttyACM0", "COM0", "COM1", "COM2", "COM3"]
+        self.serial_ports = ["/dev/ttyACM0","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3"]
         self.current_port_index = 1  # Default to the second port in the list
 
         self.serial_port = QSerialPort()
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
-        self.serial_port.setBaudRate(1000000)
+        self.serial_port.setBaudRate(460800)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
         # Create text edit for live serial data
@@ -166,11 +166,12 @@ class SerialPlotterWindow(QMainWindow):
                 # Update text edit with new serial data
                 self.serial_text_edit.append(data)
 
-                scaling_factor = 256
+                scaling_factor = 1
                 gravity = 9.8067
 
                 if len(values) == 5:
                     accel_id = int(values[0])
+                    utime = (int(values[1]))
                     x_accel = (float(values[2]) / scaling_factor) * gravity
                     y_accel = (float(values[3]) / scaling_factor) * gravity
                     z_accel = (float(values[4]) / scaling_factor) * gravity
@@ -191,7 +192,7 @@ class SerialPlotterWindow(QMainWindow):
                     elif accel_id == 4:
                         self.update_plot(3, x_accel, y_accel, z_accel)  # Plot X for Sensor 4
 
-                    self.data_records.append([accel_id, x_accel, y_accel, z_accel])
+                    self.data_records.append([utime, accel_id, x_accel, y_accel, z_accel])
 
             except (UnicodeDecodeError, IndexError, ValueError) as e:
                 print(f"Error processing data: {e}")
@@ -217,7 +218,7 @@ class SerialPlotterWindow(QMainWindow):
                 try:
                     with open(filename, "w", newline="") as file:
                         writer = csv.writer(file)
-                        writer.writerow(["Accelerometer ID", "X Acceleration", "Y Acceleration", "Z Acceleration"])
+                        writer.writerow(["Time [microseconds]", "Accelerometer ID", "X Acceleration", "Y Acceleration", "Z Acceleration"])
                         writer.writerows(self.data_records)
                     QMessageBox.information(
                         self, "Export Success", "Data exported successfully.")

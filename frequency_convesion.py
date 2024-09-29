@@ -1,0 +1,221 @@
+import sys
+import pandas as pd
+import numpy as np
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel
+from PyQt6.QtCore import Qt
+import pyqtgraph as pg
+from pyqtgraph import PlotWidget
+from scipy.signal import find_peaks
+
+class SensorPlot(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        # Set up the main window
+        self.setWindowTitle("Sensor Data Plot with FFT")
+        self.setGeometry(100, 100, 800, 600)
+
+        # Create a central widget and layout
+        central_widget = QWidget()
+        layout = QVBoxLayout()
+
+        # Create two PlotWidgets: one for time domain and one for frequency domain
+        self.plot_widget_time = PlotWidget()  # Time domain plot
+        self.plot_widget_fft = PlotWidget()  # Frequency domain plot
+
+        # Create sliders for setting the FFT time interval and tolerance
+        self.start_time_slider = QSlider(Qt.Orientation.Horizontal)
+        self.end_time_slider = QSlider(Qt.Orientation.Horizontal)
+        self.tolerance_slider = QSlider(Qt.Orientation.Horizontal)
+
+        # Set ranges for sliders based on data length and tolerance
+        self.start_time_slider.setRange(0, 100)
+        self.end_time_slider.setRange(0, 100)
+        self.tolerance_slider.setRange(1, 100)  # Example range for tolerance
+
+        self.start_time_slider.setValue(0)
+        self.end_time_slider.setValue(100)
+        self.tolerance_slider.setValue(10)  # Example default tolerance
+
+        self.start_time_slider.valueChanged.connect(self.update_plot)
+        self.end_time_slider.valueChanged.connect(self.update_plot)
+        self.tolerance_slider.valueChanged.connect(self.update_plot)
+
+        # Add labels for the sliders
+        self.start_time_label = QLabel("Start Time: 0 µs")
+        self.end_time_label = QLabel("End Time: 100 µs")
+        self.tolerance_label = QLabel("Tolerance: 10 dB")
+
+        # Add widgets to the layout
+        layout.addWidget(self.plot_widget_time)
+        layout.addWidget(self.start_time_label)
+        layout.addWidget(self.start_time_slider)
+        layout.addWidget(self.end_time_label)
+        layout.addWidget(self.end_time_slider)
+        layout.addWidget(self.tolerance_label)
+        layout.addWidget(self.tolerance_slider)
+        layout.addWidget(self.plot_widget_fft)
+
+        # Set the layout to the central widget
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+
+        # Load, filter, and plot the data
+        self.data = self.load_data('test17_Sideways.csv')
+        self.data_filtered = self.filter_data(self.data)
+
+        if not self.data_filtered.empty:
+            self.setup_sliders()  # Call to set up sliders based on data
+            self.plot_time_domain(self.data_filtered)
+            # Set tolerance to the default value when initially plotting FFT
+            default_tolerance = self.tolerance_slider.value()
+            self.plot_frequency_domain(self.data_filtered,
+                                       self.start_time_slider.value(),
+                                       self.end_time_slider.value(),
+                                       default_tolerance)  # Pass the default tolerance
+        else:
+            print("No data available after filtering.")
+
+    def load_data(self, file_path):
+        try:
+            data = pd.read_csv(file_path)
+
+            # Check if the time data is monotonic
+            if not data['Time [microseconds]'].is_monotonic_increasing:
+                print("Warning: Time data is not monotonic. Sorting the data might be affecting the interpretation.")
+
+            data = data.sort_values(by='Time [microseconds]')
+            return data
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            return pd.DataFrame()
+
+    def filter_data(self, data):
+        if data.empty:
+            return data
+
+        percentiles = {
+            'time': data['Time [microseconds]'].quantile([0.005, 0.995]),
+            'x_accel': data['X Acceleration'].quantile([0.005, 0.995]),
+            'y_accel': data['Y Acceleration'].quantile([0.005, 0.995]),
+            'z_accel': data['Z Acceleration'].quantile([0.005, 0.995]),
+        }
+
+        data_filtered = data[
+            (data['Time [microseconds]'] >= percentiles['time'].iloc[0]) &
+            (data['Time [microseconds]'] <= percentiles['time'].iloc[1]) &
+            (data['X Acceleration'] >= percentiles['x_accel'].iloc[0]) &
+            (data['X Acceleration'] <= percentiles['x_accel'].iloc[1]) &
+            (data['Y Acceleration'] >= percentiles['y_accel'].iloc[0]) &
+            (data['Y Acceleration'] <= percentiles['y_accel'].iloc[1]) &
+            (data['Z Acceleration'] >= percentiles['z_accel'].iloc[0]) &
+            (data['Z Acceleration'] <= percentiles['z_accel'].iloc[1])
+        ]
+
+        return data_filtered
+
+    def setup_sliders(self):
+        """Setup the sliders based on the filtered data."""
+        time_values = self.data_filtered['Time [microseconds]'].to_numpy()
+
+        # Set the maximum values based on the actual time range
+        self.start_time_slider.setRange(0, len(time_values) - 1)
+        self.end_time_slider.setRange(0, len(time_values) - 1)
+
+        # Set default values based on the data length
+        self.start_time_slider.setValue(0)
+        self.end_time_slider.setValue(len(time_values) - 1)
+
+        self.update_labels()
+
+    def update_labels(self):
+        """Update the labels to show actual time values and tolerance."""
+        start_index = self.start_time_slider.value()
+        end_index = self.end_time_slider.value()
+
+        # Get the actual time values based on indices
+        start_time = self.data_filtered['Time [microseconds]'].iloc[start_index]
+        end_time = self.data_filtered['Time [microseconds]'].iloc[end_index]
+
+        tolerance_value = self.tolerance_slider.value()
+
+        self.start_time_label.setText(f"Start Time: {start_time:.2f} µs")
+        self.end_time_label.setText(f"End Time: {end_time:.2f} µs")
+        self.tolerance_label.setText(f"Tolerance: {tolerance_value} dB")
+
+    def update_plot(self):
+        """Update the FFT plot based on the sliders."""
+        self.update_labels()
+        start_index = self.start_time_slider.value()
+        end_index = self.end_time_slider.value()
+        tolerance_value = self.tolerance_slider.value()
+
+        if start_index < end_index:
+            self.plot_frequency_domain(self.data_filtered, start_index, end_index, tolerance_value)
+        else:
+            print("Start index must be less than end index.")
+
+    def plot_frequency_domain(self, data, start_index, end_index, tolerance):
+        z_accel = data['Z Acceleration'].to_numpy()[start_index:end_index]
+        time = data['Time [microseconds]'].to_numpy()[start_index:end_index]
+
+        N = len(z_accel)
+        if N < 2:  # FFT requires at least 2 points
+            print("Not enough data points for FFT.")
+            return
+
+        dt = np.mean(np.diff(time)) * 1e-6  # Mean time difference in seconds
+        freq = np.fft.fftfreq(N, dt)
+        fft_z_accel = np.fft.fft(z_accel)
+
+        print(f"dt (sampling interval in seconds): {dt}")
+        print(f"Max frequency (Nyquist): {1 / (2 * dt)} Hz")
+
+        # Convert magnitude to dB
+        # magnitudes = 20 * np.log10(np.abs(fft_z_accel) + 1e-12)  # Prevent log(0)
+        magnitudes = np.abs(fft_z_accel)  # Prevent log(0)
+
+        # Only plot the positive frequencies and their magnitudes
+        positive_freqs = freq[:N // 2]
+        positive_magnitudes_dB = magnitudes[:N // 2]
+
+        # Clear previous FFT plot
+        self.plot_widget_fft.clear()
+        self.plot_widget_fft.plot(positive_freqs, positive_magnitudes_dB, pen='m')
+
+        # Add labels and title to the FFT plot
+        self.plot_widget_fft.setLabel('left', 'Magnitude (dB)')
+        self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
+        self.plot_widget_fft.setTitle("FFT of Z Acceleration (Frequency Domain)")
+
+        # Identify natural frequencies based on tolerance
+        peaks, _ = find_peaks(positive_magnitudes_dB, height=tolerance)
+        natural_frequencies = positive_freqs[peaks]
+        print(f"Natural Frequencies: {natural_frequencies}")
+
+    def plot_time_domain(self, data):
+        time = data['Time [microseconds]'].to_numpy()
+        x_accel = data['X Acceleration'].to_numpy()
+        y_accel = data['Y Acceleration'].to_numpy()
+        z_accel = data['Z Acceleration'].to_numpy()
+
+        self.plot_widget_time.clear()
+        self.plot_widget_time.plot(time, x_accel, pen='r', name='X Acceleration')
+        self.plot_widget_time.plot(time, y_accel, pen='g', name='Y Acceleration')
+        self.plot_widget_time.plot(time, z_accel, pen='b', name='Z Acceleration')
+
+        self.plot_widget_time.addLegend()
+        self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
+        self.plot_widget_time.setLabel('bottom', 'Time (microseconds)')
+        self.plot_widget_time.setTitle("Filtered Accelerometer Data (Time Domain)")
+
+
+
+def main():
+    app = QApplication(sys.argv)
+    main_win = SensorPlot()
+    main_win.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()
