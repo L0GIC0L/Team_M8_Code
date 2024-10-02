@@ -1,11 +1,11 @@
 import sys
 import pandas as pd
 import numpy as np
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QFileDialog
 from PyQt6.QtCore import Qt
 import pyqtgraph as pg
-from pyqtgraph import PlotWidget
 from scipy.signal import find_peaks
+
 
 class SensorPlot(QMainWindow):
     def __init__(self):
@@ -20,8 +20,8 @@ class SensorPlot(QMainWindow):
         layout = QVBoxLayout()
 
         # Create two PlotWidgets: one for time domain and one for frequency domain
-        self.plot_widget_time = PlotWidget()  # Time domain plot
-        self.plot_widget_fft = PlotWidget()  # Frequency domain plot
+        self.plot_widget_time = pg.PlotWidget()  # Time domain plot
+        self.plot_widget_fft = pg.PlotWidget()  # Frequency domain plot
 
         # Create sliders for setting the FFT time interval and tolerance
         self.start_time_slider = QSlider(Qt.Orientation.Horizontal)
@@ -46,6 +46,10 @@ class SensorPlot(QMainWindow):
         self.end_time_label = QLabel("End Time: 100 µs")
         self.tolerance_label = QLabel("Tolerance: 10 dB")
 
+        # Create the export button
+        self.export_button = QPushButton("Export CSV")
+        self.export_button.clicked.connect(self.export_data)
+
         # Add widgets to the layout
         layout.addWidget(self.plot_widget_time)
         layout.addWidget(self.start_time_label)
@@ -55,14 +59,18 @@ class SensorPlot(QMainWindow):
         layout.addWidget(self.tolerance_label)
         layout.addWidget(self.tolerance_slider)
         layout.addWidget(self.plot_widget_fft)
+        layout.addWidget(self.export_button)  # Add the export button to the layout
 
         # Set the layout to the central widget
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
         # Load, filter, and plot the data
-        self.data = self.load_data('test17_Sideways.csv')
+        self.data = self.load_data('test16_Upper.csv')
         self.data_filtered = self.filter_data(self.data)
+
+        self.positive_freqs = np.array([])  # Placeholder for frequency data
+        self.positive_magnitudes_dB = np.array([])  # Placeholder for magnitudes
 
         if not self.data_filtered.empty:
             self.setup_sliders()  # Call to set up sliders based on data
@@ -110,7 +118,7 @@ class SensorPlot(QMainWindow):
             (data['Y Acceleration'] <= percentiles['y_accel'].iloc[1]) &
             (data['Z Acceleration'] >= percentiles['z_accel'].iloc[0]) &
             (data['Z Acceleration'] <= percentiles['z_accel'].iloc[1])
-        ]
+            ]
 
         return data_filtered
 
@@ -172,16 +180,15 @@ class SensorPlot(QMainWindow):
         print(f"Max frequency (Nyquist): {1 / (2 * dt)} Hz")
 
         # Convert magnitude to dB
-        # magnitudes = 20 * np.log10(np.abs(fft_z_accel) + 1e-12)  # Prevent log(0)
-        magnitudes = np.abs(fft_z_accel)  # Prevent log(0)
+        magnitudes = np.abs(fft_z_accel)
 
         # Only plot the positive frequencies and their magnitudes
-        positive_freqs = freq[:N // 2]
-        positive_magnitudes_dB = magnitudes[:N // 2]
+        self.positive_freqs = freq[:N // 2]
+        self.positive_magnitudes_dB = magnitudes[:N // 2]
 
         # Clear previous FFT plot
         self.plot_widget_fft.clear()
-        self.plot_widget_fft.plot(positive_freqs, positive_magnitudes_dB, pen='m')
+        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen='m')
 
         # Add labels and title to the FFT plot
         self.plot_widget_fft.setLabel('left', 'Magnitude (dB)')
@@ -189,8 +196,8 @@ class SensorPlot(QMainWindow):
         self.plot_widget_fft.setTitle("FFT of Z Acceleration (Frequency Domain)")
 
         # Identify natural frequencies based on tolerance
-        peaks, _ = find_peaks(positive_magnitudes_dB, height=tolerance)
-        natural_frequencies = positive_freqs[peaks]
+        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
+        natural_frequencies = self.positive_freqs[peaks]
         print(f"Natural Frequencies: {natural_frequencies}")
 
     def plot_time_domain(self, data):
@@ -209,6 +216,40 @@ class SensorPlot(QMainWindow):
         self.plot_widget_time.setLabel('bottom', 'Time (microseconds)')
         self.plot_widget_time.setTitle("Filtered Accelerometer Data (Time Domain)")
 
+    def export_data(self):
+        """Export the trimmed data based on slider selection to a CSV file."""
+        start_index = self.start_time_slider.value()
+        end_index = self.end_time_slider.value()
+
+        # Ensure the indices are in a valid range
+        if start_index >= end_index:
+            print("Invalid time range selected. Start index must be less than end index.")
+            return
+
+        # Select the data within the chosen range
+        trimmed_data = self.data_filtered.iloc[start_index:end_index]
+
+        # Combine frequency data with time-domain data
+        freq_data = pd.DataFrame({
+            'Frequency (Hz)': self.positive_freqs,
+            'Magnitude (dB)': self.positive_magnitudes_dB
+        })
+
+        # Open a file dialog to select the location to save the CSV
+        file_dialog = QFileDialog()
+        file_path, _ = file_dialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+
+        if file_path:
+            try:
+                # Save the time-domain data to a sheet
+                trimmed_data.to_csv(file_path, index=False)
+
+                # Save frequency-domain data to a new sheet
+                freq_data.to_csv(file_path.replace(".csv", "_frequency.csv"), index=False)
+
+                print(f"Data successfully exported to {file_path}")
+            except Exception as e:
+                print(f"Failed to export data: {e}")
 
 
 def main():
@@ -216,6 +257,7 @@ def main():
     main_win = SensorPlot()
     main_win.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
