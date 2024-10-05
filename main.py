@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PyQt6.QtCore import QIODevice, Qt
 from PyQt6.QtSerialPort import QSerialPort
 from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
-    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect
+    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea
 from PyQt6.QtGui import QPalette, QColor
 
 
@@ -33,6 +33,10 @@ class CircularBuffer:
 
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
+
+
+        
+        # ---------------------------------------- Initialization ---------------------------------------- #
         super().__init__()
 
         self.setWindowTitle("Real-Time Accelerometer Viewer")
@@ -51,7 +55,7 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_sizes = [1000, 3000, 5000, 7000, 10000,17500,30000]
         self.buffer_capacity = self.buffer_sizes[0]
 
-        self.serial_ports = ["/dev/ttyACM0","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3"]
+        self.serial_ports = ["/dev/ttyACM0","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
         self.current_port_index = 1  # Default to the second port in the list
 
         self.serial_port = QSerialPort()
@@ -59,33 +63,67 @@ class SerialPlotterWindow(QMainWindow):
         self.serial_port.setBaudRate(460800)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
-        # Create text edit for live serial data
+        
+
+        # ------------------------------------------ Raw Data ------------------------------------------ #
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
-        self.plot_layout.addWidget(self.serial_text_edit, 0, 3, 4, 1)  # Add it to the right side of the layout
+        self.plot_layout.addWidget(self.serial_text_edit, 2, 0, 1, 4)  # Add it to the right side of the layout
+
+
+
+        # ----------------------------------------- Options Menu ----------------------------------------- #
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)  # Allows the scroll area to resize with the window
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+
+        content_widget = QWidget()
+        content_layout = QGridLayout(content_widget)
+        content_widget.setObjectName("scroll")  # Set object name
+        scroll_area.setMinimumSize(200, 150)
+
+        options_label = QLabel("Options")
+        content_layout.addWidget(options_label, 0, 0, 1, 2)
+        options_label.setObjectName("heading_label")  # Set object name
+        options_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
 
         # Add the buffer size combo and export button to the layout
+        buffer_size_label = QLabel("Buffer Size:")
+        content_layout.addWidget(buffer_size_label, 1, 0, 1, 1)
+        buffer_size_label.setObjectName("combo_label")  # Set object name
+        buffer_size_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         buffer_size_combo = QComboBox()
         buffer_size_combo.addItems([str(size) for size in self.buffer_sizes])
         buffer_size_combo.setCurrentIndex(0)
         buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
-        self.plot_layout.addWidget(buffer_size_combo, 2, 0, 1, 1)
+        content_layout.addWidget(buffer_size_combo, 1, 1, 1, 1)
 
         # Add the buffer size combo and export button to the layout
+        serial_port_label = QLabel("COM Port:")
+        content_layout.addWidget(serial_port_label, 2, 0, 1, 1)
+        serial_port_label.setObjectName("combo_label")  # Set object name
+        serial_port_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.serial_port_combo = QComboBox()
         self.serial_port_combo.addItems(self.serial_ports)
         self.serial_port_combo.setCurrentIndex(self.current_port_index)
         self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
-        self.plot_layout.addWidget(self.serial_port_combo, 3, 0, 1, 1)
-
-        export_button = QPushButton("Export Data")
-        export_button.clicked.connect(self.export_data)
-        self.plot_layout.addWidget(export_button, 2, 1, 1, 1)
+        content_layout.addWidget(self.serial_port_combo, 2, 1, 1, 1)
 
         self.reconnect_button = QPushButton("Reconnect")
         self.reconnect_button.clicked.connect(self.reconnect_serial_port)
-        self.plot_layout.addWidget(self.reconnect_button, 3, 1, 1, 1)
+        content_layout.addWidget(self.reconnect_button, 3, 0, 1, 2)
 
+        export_button = QPushButton("Export Data")
+        export_button.clicked.connect(self.export_data)
+        content_layout.addWidget(export_button, 4, 0, 1, 2)
+
+        scroll_area.setWidget(content_widget)
+        self.plot_layout.addWidget(scroll_area, 0, 3, 2, 1)
+
+
+
+        # ------------------------------------------ Tabs ------------------------------------------ #
         # Set up the plotting tab's layout and add to tab widget
         self.plot_tab.setLayout(self.plot_layout)
         self.tab_widget.addTab(self.plot_tab, "Plot Data")  # Add Plot tab
@@ -132,23 +170,17 @@ class SerialPlotterWindow(QMainWindow):
         graph_widget.setLabel("bottom", x_label)
         graph_widget.setMouseEnabled(x=True, y=False)
         graph_widget.setClipToView(True)
+        graph_widget.setMinimumSize(200, 150)
 
         # Create a container widget for the graph with a layout
         graph_widget_container = QWidget()
+        graph_widget_container.setObjectName("graphy")  # Set object name
         graph_widget_layout = QVBoxLayout()
         graph_widget_layout.addWidget(graph_widget)
         graph_widget_container.setLayout(graph_widget_layout)
 
-        # Apply rounded corners to the graph container using a stylesheet
-        graph_widget_container.setStyleSheet("""
-            QWidget {
-                border-radius: 10px;  /* Rounded corners */
-                background-color: #2b2b2b;
-            }
-        """)
-
         # Add the container to the main layout
-        self.plot_layout.addWidget(graph_widget_container, row, col)
+        self.plot_layout.addWidget(graph_widget_container, row, col, 1, 1)
 
         # Data buffer and plot item setup
         data_buffer = CircularBuffer(self.buffer_capacity)

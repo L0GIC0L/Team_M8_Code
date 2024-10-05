@@ -23,10 +23,29 @@ QLabel {
     border-radius: 5px;  /* Optional if you want rounded labels */
 }
 
+#combo_label {
+    color: #CCCCCC;
+}
+
+#heading_label {
+    color: #CCCCCC;
+    font-size: 18px;
+}
+
 QComboBox {
     padding: 4px;
     font-size: 12px;
     /* border-radius: 5px;  /* Rounded corners */
+}
+
+#scroll {
+    background-color: #333333;
+    border: none;
+}
+
+QScrollArea {
+    background-color: #333333;
+    border: none;
 }
 
 QTextEdit {
@@ -44,6 +63,11 @@ QLineEdit {
 
 QWidget {
     /* border-radius: 10px; */
+}
+
+#graphy {
+    border-radius: 10px;  /* Rounded corners */
+    background-color: #2b2b2b;
 }
 
 QMainWindow {
