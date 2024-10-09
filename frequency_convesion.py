@@ -21,7 +21,9 @@ class SensorPlot(QMainWindow):
 
         # Create two PlotWidgets: one for time domain and one for frequency domain
         self.plot_widget_time = pg.PlotWidget()  # Time domain plot
+        self.plot_widget_time.setBackground("#252525")
         self.plot_widget_fft = pg.PlotWidget()  # Frequency domain plot
+        self.plot_widget_fft.setBackground("#252525")
 
         # Create sliders for setting the FFT time interval and tolerance
         self.start_time_slider = QSlider(Qt.Orientation.Horizontal)
@@ -66,7 +68,7 @@ class SensorPlot(QMainWindow):
         self.setCentralWidget(central_widget)
 
         # Load, filter, and plot the data
-        self.data = self.load_data('justanythingidk.csv')
+        self.data = self.load_data('Samples/test4.csv')
         self.data_filtered = self.filter_data(self.data)
 
         self.positive_freqs = np.array([])  # Placeholder for frequency data
@@ -188,7 +190,9 @@ class SensorPlot(QMainWindow):
 
         # Clear previous FFT plot
         self.plot_widget_fft.clear()
-        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen='m')
+
+        pen4 = pg.mkPen(color='#F7F5FB')
+        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen=pen4)
 
         # Add labels and title to the FFT plot
         self.plot_widget_fft.setLabel('left', 'Magnitude (dB)')
@@ -207,9 +211,14 @@ class SensorPlot(QMainWindow):
         z_accel = data['Z Acceleration'].to_numpy()
 
         self.plot_widget_time.clear()
-        self.plot_widget_time.plot(time, x_accel, pen='r', name='X Acceleration')
-        self.plot_widget_time.plot(time, y_accel, pen='g', name='Y Acceleration')
-        self.plot_widget_time.plot(time, z_accel, pen='b', name='Z Acceleration')
+
+        pen1 = pg.mkPen(color='#2541B2')
+        pen2 =  pg.mkPen(color='#1768AC')
+        pen3 = pg.mkPen(color='#06BEE1')
+
+        self.plot_widget_time.plot(time, x_accel, pen=pen1, name='X Acceleration')
+        self.plot_widget_time.plot(time, y_accel, pen=pen2, name='Y Acceleration')
+        self.plot_widget_time.plot(time, z_accel, pen=pen3, name='Z Acceleration')
 
         self.plot_widget_time.addLegend()
         self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
@@ -254,6 +263,11 @@ class SensorPlot(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+
+    # Load the stylesheet
+    with open("style.qss", "r") as style_file:
+        app.setStyleSheet(style_file.read())
+
     main_win = SensorPlot()
     main_win.show()
     sys.exit(app.exec())
