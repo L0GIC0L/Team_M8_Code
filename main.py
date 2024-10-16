@@ -36,7 +36,7 @@ class SerialPlotterWindow(QMainWindow):
 
 
         
-        # ---------------------------------------- Initialization ---------------------------------------- #
+    # ---------------------------------------- Initialization ---------------------------------------- #
         super().__init__()
 
         self.setWindowTitle("Real-Time Accelerometer Viewer")
@@ -44,6 +44,9 @@ class SerialPlotterWindow(QMainWindow):
 
         self.tab_widget = QTabWidget()  # Create a tab widget
 
+
+
+    # ----------------------------------------- Plot Tab ------------------------------------------ #
         self.plot_tab = QWidget()
         self.plot_layout = QGridLayout()
 
@@ -65,14 +68,14 @@ class SerialPlotterWindow(QMainWindow):
 
         
 
-        # ------------------------------------------ Raw Data ------------------------------------------ #
+        # ------------------------------------ Raw Data ------------------------------------ #
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
         self.plot_layout.addWidget(self.serial_text_edit, 2, 0, 1, 4)  # Add it to the right side of the layout
 
 
 
-        # ----------------------------------------- Options Menu ----------------------------------------- #
+        # ---------------------------------- Options Menu ---------------------------------- #
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)  # Allows the scroll area to resize with the window
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
@@ -87,6 +90,7 @@ class SerialPlotterWindow(QMainWindow):
         content_layout.addWidget(options_label, 0, 0, 1, 2)
         options_label.setObjectName("heading_label")  # Set object name
         options_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        options_label.setFixedHeight(50)
 
         # Add the buffer size combo and export button to the layout
         buffer_size_label = QLabel("Buffer Size:")
@@ -118,48 +122,109 @@ class SerialPlotterWindow(QMainWindow):
         export_button.clicked.connect(self.export_data)
         content_layout.addWidget(export_button, 4, 0, 1, 2)
 
+        spacer = QWidget()
+        content_layout.addWidget(spacer, 5, 0, 1, 2)
+
         scroll_area.setWidget(content_widget)
         self.plot_layout.addWidget(scroll_area, 0, 3, 2, 1)
 
-
-
-        # ------------------------------------------ Tabs ------------------------------------------ #
         # Set up the plotting tab's layout and add to tab widget
         self.plot_tab.setLayout(self.plot_layout)
         self.tab_widget.addTab(self.plot_tab, "Plot Data")  # Add Plot tab
 
+
+
+    # ----------------------------------------- Settings Tab ------------------------------------------ #
         # Create another tab for additional settings or information
         self.settings_tab = QWidget()
-        self.settings_layout = QVBoxLayout()
-        self.settings_text = QTextEdit("Settings or additional information can go here.")
-        self.settings_layout.addWidget(self.settings_text)
+        self.settings_layout = QGridLayout()
+
+        s_scroll_area = QScrollArea()
+        s_scroll_area.setWidgetResizable(True)  # Allows the scroll area to resize with the window
+        s_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+        s_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+
+        s_content_widget = QWidget()
+        s_content_layout = QGridLayout(s_content_widget)
+        s_content_widget.setObjectName("scroll")  # Set object name
+        s_scroll_area.setMinimumSize(200, 150)
+
+        settings_label = QLabel("Settings")
+        s_content_layout.addWidget(settings_label, 0, 0, 1, 2)
+        settings_label.setObjectName("heading_label")  # Set object name
+        settings_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+        s_scroll_area.setWidget(s_content_widget)
+        self.settings_layout.addWidget(s_scroll_area, 0, 3, 2, 1)
+
+        # Set up the plotting tab's layout and add to tab widget
         self.settings_tab.setLayout(self.settings_layout)
+        self.tab_widget.addTab(self.settings_tab, "Settings")  # Add Plot tab
 
-        # Add the settings tab to the tab widget
-        self.tab_widget.addTab(self.settings_tab, "Settings")
 
+
+    # ----------------------------------------- Frequency Graph Tab ------------------------------------------ #
         # Create another tab for additional settings or information
         self.frequency_tab = QWidget()
-        self.frequency_layout = QVBoxLayout()
-        self.frequency_text = QTextEdit("Placeholder Text")
-        self.frequency_layout.addWidget(self.frequency_text)
+        self.frequency_layout = QGridLayout()
+
+        f_scroll_area = QScrollArea()
+        f_scroll_area.setWidgetResizable(True)  # Allows the scroll area to resize with the window
+        f_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+        f_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+
+        f_content_widget = QWidget()
+        f_content_layout = QGridLayout(f_content_widget)
+        f_content_widget.setObjectName("scroll")  # Set object name
+        f_scroll_area.setMinimumSize(200, 150)
+
+        frequency_label = QLabel("Frequency Graph")
+        f_content_layout.addWidget(frequency_label, 0, 0, 1, 2)
+        frequency_label.setObjectName("heading_label")  # Set object name
+        frequency_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+        f_scroll_area.setWidget(f_content_widget)
+        self.frequency_layout.addWidget(f_scroll_area, 0, 3, 2, 1)
+
+        # Set up the plotting tab's layout and add to tab widget
         self.frequency_tab.setLayout(self.frequency_layout)
+        self.tab_widget.addTab(self.frequency_tab, "Frequency Graph")  # Add Plot tab
 
-        # Add the settings tab to the tab widget
-        self.tab_widget.addTab(self.frequency_tab, "Frequency Graph")
 
+
+    # ----------------------------------------- Analysis Tab ------------------------------------------ #
         # Create another tab for additional settings or information
         self.analysis_tab = QWidget()
-        self.analysis_layout = QVBoxLayout()
-        self.analysis_text = QTextEdit("Placeholder Text")
-        self.analysis_layout.addWidget(self.analysis_text)
-        self.analysis_tab.setLayout(self.analysis_layout)
+        self.analysis_layout = QGridLayout()
 
-        # Add the settings tab to the tab widget
-        self.tab_widget.addTab(self.analysis_tab, "Analysis")
+        a_scroll_area = QScrollArea()
+        a_scroll_area.setWidgetResizable(True)  # Allows the scroll area to resize with the window
+        a_scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+        a_scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)  # Never show the horizontal scrollbar
+
+        a_content_widget = QWidget()
+        a_content_layout = QGridLayout(a_content_widget)
+        a_content_widget.setObjectName("scroll")  # Set object name
+        a_scroll_area.setMinimumSize(200, 150)
+
+        analysis_label = QLabel("Analysis")
+        a_content_layout.addWidget(analysis_label, 0, 0, 1, 2)
+        analysis_label.setObjectName("heading_label")  # Set object name
+        analysis_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+
+        a_scroll_area.setWidget(a_content_widget)
+        self.analysis_layout.addWidget(a_scroll_area, 0, 3, 2, 1)
+
+        # Set up the plotting tab's layout and add to tab widget
+        self.analysis_tab.setLayout(self.analysis_layout)
+        self.tab_widget.addTab(self.analysis_tab, "Analysis")  # Add Plot tab
+
+        
 
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
+
+        
 
     def add_graph(self, name, x_label, y_label, row, col, color, is_live=False):
         # Create the graph widget

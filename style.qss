@@ -117,7 +117,7 @@ QMessageBox {
 
 /* Tab Widget styles */
 QTabWidget::pane {
-    border: 3px solid #444444; /* Tab pane border color */
+    border: 0px solid #444444; /* Tab pane border color */
     background: #333333; /* Background for tab pane */
 }
 
@@ -125,20 +125,26 @@ QTabBar::tab {
     background: #2b2b2b; /* Tab background */
     color: #b1b1b1; /* Tab text color */
     padding: 10px;
-    border: 1px solid #444444; /* Tab border color */
+    border-top: 2px solid #444444; /* Tab border color */
+    border-left: 0px solid #444444; /* Tab border color */
+    border-right: 2px solid #444444; /* Tab border color */
     border-bottom-color: #444444; /* Bottom border color */
-    border-top-left-radius: 0px; /* No rounded corners */
-    border-top-right-radius: 0px; /* No rounded corners */
+    border-top-left-radius: 2px; /* No rounded corners */
+    border-top-right-radius: 2px; /* No rounded corners */
 }
 
 QTabBar::tab:selected, QTabBar::tab:hover {
-    background: #2b2b2b; /* Background for selected/hovered tab */
     color: white; /* Text color for selected/hovered tab */
+    border-top: 2px solid #444444; /* Tab border color */
+    border-left: 0px solid #444444; /* Tab border color */
+    border-right: 2px solid #444444; /* Tab border color */
 }
 
 QTabBar::tab:selected {
+    background: #333333; /* Background for selected/hovered tab */
     border-color: #444444; /* Border color for selected tab */
-    border-bottom-color: #333333; /* Bottom border color for selected tab */
+    border-bottom-color: #2b2b2b; /* Bottom border color for selected tab */
+    border-bottom: 4px; /* Bottom border color for selected tab */
 }
 
 /* Slider styles */
