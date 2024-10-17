@@ -175,7 +175,7 @@ class SerialPlotterWindow(QMainWindow):
 
         # Create a QTimer for controlled plot updates
         self.plot_timer = QTimer(self)
-        self.plot_timer.setInterval(10)  # Refresh the plot every 10 milliseconds (10 Hz)
+        self.plot_timer.setInterval(60)  # Refresh the plot every 10 milliseconds (10 Hz)
         self.plot_timer.timeout.connect(self.update_plots)
         self.plot_timer.start()
 
@@ -189,6 +189,7 @@ class SerialPlotterWindow(QMainWindow):
         graph_widget.setMouseEnabled(x=True, y=False)
         graph_widget.setClipToView(True)
         graph_widget.setMinimumSize(200, 150)
+        graph_widget.setYRange(-20, 20)  # For accelerometer data, this range might be appropriate
 
         # Create a container widget for the graph with a layout
         graph_widget_container = QWidget()
@@ -256,19 +257,9 @@ class SerialPlotterWindow(QMainWindow):
                 self.data_buffers[index].push(x)
 
     def update_plots(self):
-        # Iterate through each plot item and update with decimated data
         for i, plot_item in enumerate(self.plot_data_items):
-            # Get full buffered data for the current plot
             full_data = self.data_buffers[i].get_data()
-
-            # Decimate the data if there are enough points to avoid overloading the plot
-            if len(full_data) > 10:  # Adjust threshold based on performance
-                decimated_data = full_data[::10]  # Take every 10th data point
-            else:
-                decimated_data = full_data  # If insufficient data, plot all
-
-            # Set the decimated data to the plot item
-            plot_item.setData(decimated_data)
+            plot_item.setData(full_data)
 
     def export_data(self):
         if len(self.data_records) > 0:
@@ -337,6 +328,9 @@ if __name__ == "__main__":
 
     # Load stylesheet from external file
     load_stylesheet(app)
+
+    # Set OpenGL ES attribute on the application
+    app.setAttribute(Qt.ApplicationAttribute.AA_UseOpenGLES)
 
     signal.signal(signal.SIGINT, keyboard_interrupt_handler)
 
