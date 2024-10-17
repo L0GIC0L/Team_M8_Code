@@ -2,6 +2,7 @@ import csv
 import os
 import signal
 import sys
+import time
 
 import numpy as np
 import pyqtgraph as pg
@@ -108,8 +109,21 @@ class SerialPlotterWindow(QMainWindow):
         self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
         content_layout.addWidget(self.serial_port_combo, 2, 1, 1, 1)
 
+        self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000,100000]
+        self.current_communication_speed = 0
+
+        # Add the buffer size combo and export button to the layout
+        communication_speed_label = QLabel("Speed:")
+        content_layout.addWidget(communication_speed_label, 5, 0, 1, 1)
+        communication_speed_label.setObjectName("combo_label")  # Set object name
+        communication_speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.communication_speed_combo = QComboBox()
+        self.communication_speed_combo.addItems([str(size) for size in self.communication_speeds])
+        self.communication_speed_combo.setCurrentIndex(self.current_communication_speed)
+        content_layout.addWidget(self.communication_speed_combo, 5, 1, 1, 1)
+
         self.reconnect_button = QPushButton("Reconnect")
-        self.reconnect_button.clicked.connect(self.reconnect_serial_port)
+        self.reconnect_button.clicked.connect(self.change_serial_port)
         content_layout.addWidget(self.reconnect_button, 3, 0, 1, 2)
 
         export_button = QPushButton("Export Data")
@@ -282,15 +296,18 @@ class SerialPlotterWindow(QMainWindow):
 
     def change_serial_port(self, index):
         self.current_port_index = index
-        self.reconnect_serial_port()
+        selected_speed = int(self.communication_speed_combo.currentText())
+        self.reconnect_serial_port(selected_speed)
 
-    def reconnect_serial_port(self):
+    def reconnect_serial_port(self,selected_speed):
         if self.serial_port.isOpen():
             self.serial_port.close()
 
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
 
         if self.serial_port.open(QSerialPort.OpenModeFlag.ReadWrite):
+            print(selected_speed)
+            self.serial_port.write((str(selected_speed) + '\n').encode())
             print(f"Successfully connected to {self.serial_ports[self.current_port_index]}")
         else:
             print(f"Failed to connect to {self.serial_ports[self.current_port_index]}")
