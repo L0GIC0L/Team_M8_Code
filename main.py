@@ -10,7 +10,7 @@ from PyQt6.QtSerialPort import QSerialPort
 from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
     QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea
 from PyQt6.QtGui import QPalette, QColor
-
+from PyQt6.QtCore import QTimer
 
 class CircularBuffer:
     def __init__(self, capacity):
@@ -34,8 +34,6 @@ class CircularBuffer:
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
 
-
-        
         # ---------------------------------------- Initialization ---------------------------------------- #
         super().__init__()
 
@@ -55,15 +53,15 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_sizes = [1000, 3000, 5000, 7000, 10000,17500,30000]
         self.buffer_capacity = self.buffer_sizes[0]
 
-        self.serial_ports = ["/dev/ttyACM0","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
+        self.serial_ports = ["/dev/ttyACM0","/dev/ttyACM1","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
         self.current_port_index = 1  # Default to the second port in the list
 
         self.serial_port = QSerialPort()
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
-        self.serial_port.setBaudRate(460800)
+        self.serial_port.setBaudRate(1000000)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
-        
+
 
         # ------------------------------------------ Raw Data ------------------------------------------ #
         self.serial_text_edit = QTextEdit()
@@ -155,13 +153,19 @@ class SerialPlotterWindow(QMainWindow):
         self.analysis_layout.addWidget(self.analysis_text)
         self.analysis_tab.setLayout(self.analysis_layout)
 
-        # Add the settings tab to the tab widget
+        # Add the analysis tab to the tab widget
         self.tab_widget.addTab(self.analysis_tab, "Analysis")
 
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
 
-    def add_graph(self, name, x_label, y_label, row, col, color, is_live=False):
+        # Create a QTimer for controlled plot updates
+        self.plot_timer = QTimer(self)
+        self.plot_timer.setInterval(10)  # Refresh the plot every 10 milliseconds (10 Hz)
+        self.plot_timer.timeout.connect(self.update_plots)
+        self.plot_timer.start()
+
+    def add_graph(self, name, x_label, y_label, row, col, color, is_live=True):
         # Create the graph widget
         graph_widget = pg.PlotWidget()
         graph_widget.setBackground("#2b2b2b")
@@ -190,57 +194,67 @@ class SerialPlotterWindow(QMainWindow):
         self.plot_data_items.append(plot_data_item)
 
     def receive_serial_data(self):
+        # Read multiple lines at once to reduce the number of plot updates
         while self.serial_port.canReadLine():
             try:
+                # Read a line, decode and strip it
                 data = self.serial_port.readLine().data().decode("utf-8").strip()
                 values = data.split()
 
-                # Update text edit with new serial data
+                # Store raw data in text display
                 self.serial_text_edit.append(data)
 
                 scaling_factor = 1
                 gravity = 9.8067
 
+                # Ensure the data line has the expected 5 values
                 if len(values) == 5:
                     accel_id = int(values[0])
-                    utime = (int(values[1]))
+                    utime = int(values[1])
                     x_accel = (float(values[2]) / scaling_factor) * gravity
                     y_accel = (float(values[3]) / scaling_factor) * gravity
                     z_accel = (float(values[4]) / scaling_factor) * gravity
 
+                    # Depending on accel_id, push data to appropriate buffer
                     if accel_id == 1:
-                        self.update_plot(0, x_accel, 0, 0)  # Plot X for Sensor 1
-                        self.update_plot(1, 0, y_accel, 0, is_y_data=True)  # Plot Y for Sensor 1 on bottom graph
-                        self.update_plot(2, 0, 0, z_accel, is_y_data=False,
-                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
-
+                        self.update_data_buffer(0, x_accel, 0, 0)  # Sensor 1 X
+                        self.update_data_buffer(1, 0, y_accel, 0, is_y_data=True)  # Sensor 1 Y
+                        self.update_data_buffer(2, 0, 0, z_accel, is_z_data=True)  # Sensor 1 Z
                     elif accel_id == 2:
-                        self.update_plot(3, x_accel, 0, 0)  # Plot X for Sensor 2
-                        self.update_plot(4, 0, y_accel, 0, is_y_data=True)
-                        self.update_plot(5, 0, 0, z_accel, is_y_data=False,
-                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
-                    elif accel_id == 3:
-                        self.update_plot(2, x_accel, y_accel, z_accel)  # Plot X for Sensor 3
-                    elif accel_id == 4:
-                        self.update_plot(3, x_accel, y_accel, z_accel)  # Plot X for Sensor 4
+                        self.update_data_buffer(3, x_accel, 0, 0)  # Sensor 2 X
+                        self.update_data_buffer(4, 0, y_accel, 0, is_y_data=True)  # Sensor 2 Y
+                        self.update_data_buffer(5, 0, 0, z_accel, is_z_data=True)  # Sensor 2 Z
 
+                    # Record the data for potential export
                     self.data_records.append([utime, accel_id, x_accel, y_accel, z_accel])
 
             except (UnicodeDecodeError, IndexError, ValueError) as e:
                 print(f"Error processing data: {e}")
 
-    def update_plot(self, index, x, y, z, is_y_data=False, is_z_data=False):
+    def update_data_buffer(self, index, x, y, z, is_y_data=False, is_z_data=False):
+        # Push data into appropriate buffer depending on which axis (X, Y, Z) it belongs to
         if index < len(self.data_buffers):
             if is_y_data:
-                # Use Y acceleration data for specific plots
                 self.data_buffers[index].push(y)
             elif is_z_data:
-                # Use Z acceleration data for specific plots
                 self.data_buffers[index].push(z)
             else:
-                # Use X acceleration data for default plots
                 self.data_buffers[index].push(x)
-            self.plot_data_items[index].setData(self.data_buffers[index].get_data())
+
+    def update_plots(self):
+        # Iterate through each plot item and update with decimated data
+        for i, plot_item in enumerate(self.plot_data_items):
+            # Get full buffered data for the current plot
+            full_data = self.data_buffers[i].get_data()
+
+            # Decimate the data if there are enough points to avoid overloading the plot
+            if len(full_data) > 10:  # Adjust threshold based on performance
+                decimated_data = full_data[::10]  # Take every 10th data point
+            else:
+                decimated_data = full_data  # If insufficient data, plot all
+
+            # Set the decimated data to the plot item
+            plot_item.setData(decimated_data)
 
     def export_data(self):
         if len(self.data_records) > 0:
