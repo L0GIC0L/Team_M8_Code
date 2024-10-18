@@ -69,7 +69,7 @@ QLineEdit {
 
 /* General Widget Styles */
 QWidget {
-    /* border-radius: 10px; */
+     /* border-radius: 10px;*/
 }
 
 /* Dialog Styles */
@@ -84,7 +84,7 @@ QMenu {
 }
 
 QMenu::item {
-    background-color: transparent; /* Default item background */
+    background-color: #444444; /* Default item background */
 }
 
 QMenu::item:selected {
@@ -107,6 +107,12 @@ QComboBox QAbstractItemView {
 QMessageBox {
     background-color: #333333; /* Background color for message box */
     color: white; /* Text color */
+}
+
+QMessageBox QScrollBar:vertical {
+    background-color: #2b2b2b;
+    width: 12px;
+    margin: 0px;
 }
 
 /* Graph Styles */
@@ -172,3 +178,70 @@ QSlider::add-page:horizontal {
     border-radius: 10px; /* Rounded corners */
     background-color: #2b2b2b; /* Background for graph container */
 }
+
+/* QCheckBox Styles */
+QCheckBox {
+    color: #CCCCCC;  /* Set the text color to white */
+    font-size: 12px;
+    font-weight: bold;
+    text-align: left; /* Ensure the text is left-aligned */
+    padding-right: 30px; /* Make space for the checkbox indicator */
+}
+
+QCheckBox::indicator {
+    width: 10px;  /* Set the size of the checkbox */
+    height: 10px;
+    border: 2px solid #cc6604; /* Color of the checkbox border */
+    background-color: #333333; /* Background color when unchecked */
+    border-radius: 3px; /* Optional: rounded corners for checkbox */
+}
+
+QCheckBox::indicator:checked {
+    background-color: #cc6604; /* Background color when checked */
+    border: 2px solid #cc6604; /* Border when checked */
+}
+
+QComboBox {
+    background-color: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QComboBox:hover {
+    background-color: #323232;
+}
+
+QComboBox:drop-down {
+    border: 1px;
+    width: 4px;
+}
+
+QTextEdit {
+    background-color: #black;
+    color: white;
+    border: 1px solid #404040;
+}
+
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #666666;
+    min-height: 20px;
+    margin: 3px;
+    border-radius: 3px;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: #777777;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+

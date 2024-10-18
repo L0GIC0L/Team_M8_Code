@@ -68,7 +68,7 @@ class SensorPlot(QMainWindow):
         self.setCentralWidget(central_widget)
 
         # Load, filter, and plot the data
-        self.data = self.load_data('Samples/speed.csv')
+        self.data = self.load_data('Samples/HAHAHA.csv')
         self.data_filtered = self.filter_data(self.data)
 
         self.positive_freqs = np.array([])  # Placeholder for frequency data

@@ -9,7 +9,7 @@ import pyqtgraph as pg
 from PyQt6.QtCore import QIODevice, Qt
 from PyQt6.QtSerialPort import QSerialPort
 from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
-    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea
+    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox
 from PyQt6.QtGui import QPalette, QColor
 from PyQt6.QtCore import QTimer
 
@@ -55,20 +55,23 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_capacity = self.buffer_sizes[0]
 
         self.serial_ports = ["/dev/ttyACM0","/dev/ttyACM1","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
-        self.current_port_index = 1  # Default to the second port in the list
+        self.current_port_index = 0  # Default to the second port in the list
 
         self.serial_port = QSerialPort()
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
         self.serial_port.setBaudRate(1000000)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
-
+        # Create a QTimer for controlled plot updates
+        self.plot_timer = QTimer(self)
+        self.plot_timer.setInterval(33)  # Refresh the plot every 10 milliseconds (10 Hz)
+        self.plot_timer.timeout.connect(self.update_plots)
+        self.plot_timer.start()
 
         # ------------------------------------------ Raw Data ------------------------------------------ #
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
         self.plot_layout.addWidget(self.serial_text_edit, 2, 0, 1, 4)  # Add it to the right side of the layout
-
 
 
         # ----------------------------------------- Options Menu ----------------------------------------- #
@@ -86,54 +89,62 @@ class SerialPlotterWindow(QMainWindow):
         content_layout.addWidget(options_label, 0, 0, 1, 2)
         options_label.setObjectName("heading_label")  # Set object name
         options_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        options_label.setMinimumHeight(20)
+        options_label.setMaximumHeight(30)
 
         # Add the buffer size combo and export button to the layout
         buffer_size_label = QLabel("Buffer Size:")
-        content_layout.addWidget(buffer_size_label, 1, 0, 1, 1)
+        content_layout.addWidget(buffer_size_label, 3, 0, 1, 1)
         buffer_size_label.setObjectName("combo_label")  # Set object name
         buffer_size_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         buffer_size_combo = QComboBox()
         buffer_size_combo.addItems([str(size) for size in self.buffer_sizes])
         buffer_size_combo.setCurrentIndex(0)
         buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
-        content_layout.addWidget(buffer_size_combo, 1, 1, 1, 1)
+        content_layout.addWidget(buffer_size_combo, 3, 1, 1, 1)
 
         # Add the buffer size combo and export button to the layout
         serial_port_label = QLabel("COM Port:")
-        content_layout.addWidget(serial_port_label, 2, 0, 1, 1)
+        content_layout.addWidget(serial_port_label, 4, 0, 1, 1)
         serial_port_label.setObjectName("combo_label")  # Set object name
         serial_port_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.serial_port_combo = QComboBox()
         self.serial_port_combo.addItems(self.serial_ports)
         self.serial_port_combo.setCurrentIndex(self.current_port_index)
         self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
-        content_layout.addWidget(self.serial_port_combo, 2, 1, 1, 1)
+        content_layout.addWidget(self.serial_port_combo, 4, 1, 1, 1)
 
         self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000,100000]
         self.current_communication_speed = 0
 
         # Add the buffer size combo and export button to the layout
         communication_speed_label = QLabel("Speed:")
-        content_layout.addWidget(communication_speed_label, 5, 0, 1, 1)
+        content_layout.addWidget(communication_speed_label, 2, 0, 1, 1)
         communication_speed_label.setObjectName("combo_label")  # Set object name
         communication_speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.communication_speed_combo = QComboBox()
         self.communication_speed_combo.addItems([str(size) for size in self.communication_speeds])
         self.communication_speed_combo.setCurrentIndex(self.current_communication_speed)
-        content_layout.addWidget(self.communication_speed_combo, 5, 1, 1, 1)
+        content_layout.addWidget(self.communication_speed_combo, 2, 1, 1, 1)
 
         self.reconnect_button = QPushButton("Reconnect")
         self.reconnect_button.clicked.connect(self.change_serial_port)
-        content_layout.addWidget(self.reconnect_button, 3, 0, 1, 2)
+        content_layout.addWidget(self.reconnect_button, 5, 0, 1, 2)
 
         export_button = QPushButton("Export Data")
         export_button.clicked.connect(self.export_data)
-        content_layout.addWidget(export_button, 4, 0, 1, 2)
+        content_layout.addWidget(export_button, 6, 0, 1, 2)
+
+        # ------------------------------------- New: Checkbox to Stop/Start Plotting ------------------------------------- #
+        self.plot_enabled_checkbox = QCheckBox("Enable Plotting")
+        self.plot_enabled_checkbox.setChecked(True)  # Start with plotting enabled
+        self.plot_enabled_checkbox.stateChanged.connect(self.toggle_plotting)
+        content_layout.addWidget(self.plot_enabled_checkbox, 1, 0, 1, 2)
+
+        self.plot_enabled_checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
 
         scroll_area.setWidget(content_widget)
         self.plot_layout.addWidget(scroll_area, 0, 3, 2, 1)
-
-
 
         # ------------------------------------------ Tabs ------------------------------------------ #
         # Set up the plotting tab's layout and add to tab widget
@@ -173,11 +184,12 @@ class SerialPlotterWindow(QMainWindow):
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
 
-        # Create a QTimer for controlled plot updates
-        self.plot_timer = QTimer(self)
-        self.plot_timer.setInterval(60)  # Refresh the plot every 10 milliseconds (10 Hz)
-        self.plot_timer.timeout.connect(self.update_plots)
-        self.plot_timer.start()
+    def toggle_plotting(self):
+        """Toggle the plotting behavior based on the checkbox."""
+        if self.plot_enabled_checkbox.isChecked():
+            self.plot_timer.start()  # Resume plotting
+        else:
+            self.plot_timer.stop()  # Stop plotting
 
     def add_graph(self, name, x_label, y_label, row, col, color, is_live=True):
         # Create the graph widget
@@ -257,9 +269,10 @@ class SerialPlotterWindow(QMainWindow):
                 self.data_buffers[index].push(x)
 
     def update_plots(self):
-        for i, plot_item in enumerate(self.plot_data_items):
-            full_data = self.data_buffers[i].get_data()
-            plot_item.setData(full_data)
+        if self.plot_enabled_checkbox.isChecked():  # Check if plotting is enabled
+            for i, plot_item in enumerate(self.plot_data_items):
+                full_data = self.data_buffers[i].get_data()
+                plot_item.setData(full_data)
 
     def export_data(self):
         if len(self.data_records) > 0:
