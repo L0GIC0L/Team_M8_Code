@@ -52,6 +52,10 @@ class SensorPlot(QMainWindow):
         self.export_button = QPushButton("Export CSV")
         self.export_button.clicked.connect(self.export_data)
 
+        # Create the open CSV button
+        self.open_button = QPushButton("Open CSV")
+        self.open_button.clicked.connect(self.open_csv)
+
         # Add widgets to the layout
         layout.addWidget(self.plot_widget_time)
         layout.addWidget(self.start_time_label)
@@ -62,29 +66,18 @@ class SensorPlot(QMainWindow):
         layout.addWidget(self.tolerance_slider)
         layout.addWidget(self.plot_widget_fft)
         layout.addWidget(self.export_button)  # Add the export button to the layout
+        layout.addWidget(self.open_button)  # Add the open CSV button to the layout
 
         # Set the layout to the central widget
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
 
         # Load, filter, and plot the data
-        self.data = self.load_data('Samples/HAHAHA.csv')
-        self.data_filtered = self.filter_data(self.data)
+        self.data = pd.DataFrame()  # Empty DataFrame initially
+        self.data_filtered = pd.DataFrame()
 
         self.positive_freqs = np.array([])  # Placeholder for frequency data
         self.positive_magnitudes_dB = np.array([])  # Placeholder for magnitudes
-
-        if not self.data_filtered.empty:
-            self.setup_sliders()  # Call to set up sliders based on data
-            self.plot_time_domain(self.data_filtered)
-            # Set tolerance to the default value when initially plotting FFT
-            default_tolerance = self.tolerance_slider.value()
-            self.plot_frequency_domain(self.data_filtered,
-                                       self.start_time_slider.value(),
-                                       self.end_time_slider.value(),
-                                       default_tolerance)  # Pass the default tolerance
-        else:
-            print("No data available after filtering.")
 
     def load_data(self, file_path):
         try:
@@ -99,6 +92,27 @@ class SensorPlot(QMainWindow):
         except Exception as e:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
+
+    def open_csv(self):
+        """Open a file dialog to select and load a CSV file."""
+        file_dialog = QFileDialog()
+        file_path, _ = file_dialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
+
+        if file_path:
+            self.data = self.load_data(file_path)
+            self.data_filtered = self.filter_data(self.data)
+
+            if not self.data_filtered.empty:
+                self.setup_sliders()
+                self.plot_time_domain(self.data_filtered)
+
+                default_tolerance = self.tolerance_slider.value()
+                self.plot_frequency_domain(self.data_filtered,
+                                           self.start_time_slider.value(),
+                                           self.end_time_slider.value(),
+                                           default_tolerance)
+            else:
+                print("No data available after filtering.")
 
     def filter_data(self, data):
         if data.empty:
@@ -265,7 +279,7 @@ def main():
     app = QApplication(sys.argv)
 
     # Load the stylesheet
-    with open("style.qss", "r") as style_file:
+    with open("Preferences/style_dark.qss", "r") as style_file:
         app.setStyleSheet(style_file.read())
 
     main_win = SensorPlot()
