@@ -342,9 +342,6 @@ if __name__ == "__main__":
     # Load stylesheet from external file
     load_stylesheet(app)
 
-    # Set OpenGL ES attribute on the application
-    app.setAttribute(Qt.ApplicationAttribute.AA_UseOpenGLES)
-
     signal.signal(signal.SIGINT, keyboard_interrupt_handler)
 
     plotter_window = SerialPlotterWindow()
