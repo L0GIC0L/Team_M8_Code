@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSl
 from PyQt6.QtCore import Qt
 import pyqtgraph as pg
 from scipy.signal import find_peaks
-
+from scipy import signal
 
 class SensorPlot(QMainWindow):
     def __init__(self):
@@ -18,6 +18,10 @@ class SensorPlot(QMainWindow):
         # Create a central widget and layout
         central_widget = QWidget()
         layout = QVBoxLayout()
+
+        # Create the toggle button for PSD/FFT
+        self.toggle_button = QPushButton("Show PSD")
+        self.toggle_button.clicked.connect(self.toggle_plot)
 
         # Create two PlotWidgets: one for time domain and one for frequency domain
         self.plot_widget_time = pg.PlotWidget()  # Time domain plot
@@ -67,6 +71,7 @@ class SensorPlot(QMainWindow):
         layout.addWidget(self.plot_widget_fft)
         layout.addWidget(self.export_button)  # Add the export button to the layout
         layout.addWidget(self.open_button)  # Add the open CSV button to the layout
+        layout.addWidget(self.toggle_button)  # Add the toggle button to the layout
 
         # Set the layout to the central widget
         central_widget.setLayout(layout)
@@ -78,6 +83,20 @@ class SensorPlot(QMainWindow):
 
         self.positive_freqs = np.array([])  # Placeholder for frequency data
         self.positive_magnitudes_dB = np.array([])  # Placeholder for magnitudes
+
+        self.plot_mode = "FFT"  # Default mode
+
+    def toggle_plot(self):
+        """Toggle between PSD and FFT plotting."""
+        if self.plot_mode == "FFT":
+            self.plot_mode = "PSD"
+            self.toggle_button.setText("Show FFT")
+        else:
+            self.plot_mode = "FFT"
+            self.toggle_button.setText("Show PSD")
+
+        # Update the plot with the current mode
+        self.update_plot()
 
     def load_data(self, file_path):
         try:
@@ -92,6 +111,27 @@ class SensorPlot(QMainWindow):
         except Exception as e:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
+
+    def plot_time_domain(self, data):
+        time = data['Time [microseconds]'].to_numpy()
+        x_accel = data['X Acceleration'].to_numpy()
+        y_accel = data['Y Acceleration'].to_numpy()
+        z_accel = data['Z Acceleration'].to_numpy()
+
+        self.plot_widget_time.clear()
+
+        pen1 = pg.mkPen(color='#2541B2')
+        pen2 = pg.mkPen(color='#1768AC')
+        pen3 = pg.mkPen(color='#06BEE1')
+
+        self.plot_widget_time.plot(time, x_accel, pen=pen1, name='X Acceleration')
+        self.plot_widget_time.plot(time, y_accel, pen=pen2, name='Y Acceleration')
+        self.plot_widget_time.plot(time, z_accel, pen=pen3, name='Z Acceleration')
+
+        self.plot_widget_time.addLegend()
+        self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
+        self.plot_widget_time.setLabel('bottom', 'Time (microseconds)')
+        self.plot_widget_time.setTitle("Filtered Accelerometer Data (Time Domain)")
 
     def open_csv(self):
         """Open a file dialog to select and load a CSV file."""
@@ -168,18 +208,21 @@ class SensorPlot(QMainWindow):
         self.tolerance_label.setText(f"Tolerance: {tolerance_value} dB")
 
     def update_plot(self):
-        """Update the FFT plot based on the sliders."""
+        """Update the FFT or PSD plot based on the sliders."""
         self.update_labels()
         start_index = self.start_time_slider.value()
         end_index = self.end_time_slider.value()
         tolerance_value = self.tolerance_slider.value()
 
         if start_index < end_index:
-            self.plot_frequency_domain(self.data_filtered, start_index, end_index, tolerance_value)
+            if self.plot_mode == "FFT":
+                self.plot_frequency_domain(self.data_filtered, start_index, end_index, tolerance_value)
+            else:  # If the mode is PSD
+                self.plot_frequency_domain(self.data_filtered, start_index, end_index, tolerance_value, mode='PSD')
         else:
             print("Start index must be less than end index.")
 
-    def plot_frequency_domain(self, data, start_index, end_index, tolerance):
+    def plot_frequency_domain(self, data, start_index, end_index, tolerance, mode='FFT'):
         z_accel = data['Z Acceleration'].to_numpy()[start_index:end_index]
         time = data['Time [microseconds]'].to_numpy()[start_index:end_index]
 
@@ -195,49 +238,31 @@ class SensorPlot(QMainWindow):
         print(f"dt (sampling interval in seconds): {dt}")
         print(f"Max frequency (Nyquist): {1 / (2 * dt)} Hz")
 
-        # Convert magnitude to dB
-        magnitudes = np.abs(fft_z_accel)
-
-        # Only plot the positive frequencies and their magnitudes
+        # Calculate Power Spectral Density (PSD)
+        psd = (np.abs(fft_z_accel) ** 2) / (N * dt)  # Power normalization
         self.positive_freqs = freq[:N // 2]
-        self.positive_magnitudes_dB = magnitudes[:N // 2]
+        self.positive_psd = psd[:N // 2]  # Take only the positive frequencies
 
-        # Clear previous FFT plot
+        # Clear previous plot
         self.plot_widget_fft.clear()
 
         pen4 = pg.mkPen(color='#F7F5FB')
-        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen=pen4)
 
-        # Add labels and title to the FFT plot
-        self.plot_widget_fft.setLabel('left', 'Magnitude (dB)')
-        self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
-        self.plot_widget_fft.setTitle("FFT of Z Acceleration (Frequency Domain)")
+        # Check the mode and plot accordingly
+        if mode == 'PSD':
+            self.plot_widget_fft.plot(self.positive_freqs, 10 * np.log10(self.positive_psd), pen=pen4)  # Convert to dB
+            self.plot_widget_fft.setLabel('left', 'PSD (dB/Hz)')
+            self.plot_widget_fft.setTitle("Power Spectral Density of Z Acceleration (Frequency Domain)")
+        else:  # FFT mode
+            magnitudes = np.abs(fft_z_accel)[:N // 2]
+            self.plot_widget_fft.plot(self.positive_freqs, magnitudes, pen=pen4)  # Plot FFT magnitudes
+            self.plot_widget_fft.setLabel('left', 'Magnitude')
+            self.plot_widget_fft.setTitle("FFT of Z Acceleration (Frequency Domain)")
 
         # Identify natural frequencies based on tolerance
-        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
+        peaks, _ = find_peaks(10 * np.log10(self.positive_psd), height=tolerance)
         natural_frequencies = self.positive_freqs[peaks]
         print(f"Natural Frequencies: {natural_frequencies}")
-
-    def plot_time_domain(self, data):
-        time = data['Time [microseconds]'].to_numpy()
-        x_accel = data['X Acceleration'].to_numpy()
-        y_accel = data['Y Acceleration'].to_numpy()
-        z_accel = data['Z Acceleration'].to_numpy()
-
-        self.plot_widget_time.clear()
-
-        pen1 = pg.mkPen(color='#2541B2')
-        pen2 =  pg.mkPen(color='#1768AC')
-        pen3 = pg.mkPen(color='#06BEE1')
-
-        self.plot_widget_time.plot(time, x_accel, pen=pen1, name='X Acceleration')
-        self.plot_widget_time.plot(time, y_accel, pen=pen2, name='Y Acceleration')
-        self.plot_widget_time.plot(time, z_accel, pen=pen3, name='Z Acceleration')
-
-        self.plot_widget_time.addLegend()
-        self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
-        self.plot_widget_time.setLabel('bottom', 'Time (microseconds)')
-        self.plot_widget_time.setTitle("Filtered Accelerometer Data (Time Domain)")
 
     def export_data(self):
         """Export the trimmed data based on slider selection to a CSV file."""
