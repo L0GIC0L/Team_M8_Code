@@ -69,9 +69,9 @@ def main():
     serial_port.setPortName("/dev/ttyACM0")  # Replace with your serial port
     serial_port.setBaudRate(9600)    # Set baud rate as an integer (9600)
 
-    if not serial_port.open(QIODevice.OpenModeFlag.ReadOnly):
-        print("Failed to open serial port")
-        sys.exit(1)
+    #if not serial_port.open(QIODevice.OpenModeFlag.ReadOnly):
+     #   print("Failed to open serial port")
+      #  sys.exit(1)
 
     # Create the PyQt application window
     window = MaxValueDisplay(serial_port)
