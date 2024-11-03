@@ -5,7 +5,7 @@ QMainWindow {
 
 /* Button Styles */
 QPushButton {
-    background-color: #cc6604; /* Button color */
+    background-color: #BD632F; /* Button color */
     color: white; /* Text color */
     border: none;
     padding: 8px 16px;
@@ -16,7 +16,6 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #5e4125; /* Button hover color */
-    cursor: pointer;
 }
 
 /* Label Styles */
@@ -64,8 +63,9 @@ QComboBox QAbstractItemView {
 
 /* Scroll Area Styles */
 #scroll {
-    background-color: #333333; /* Scroll area background */
-    border: none;
+    background-color: #2b2b2b; /* Scroll area background */
+    border-radius: 10px; /* Rounded corners */
+    border: 2px;
 }
 
 QScrollArea {
@@ -103,7 +103,7 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background-color: #cc6604; /* Highlight color for selected item */
+    background-color: #BD632F; /* Highlight color for selected item */
 }
 
 /* ToolTip Styles */
@@ -164,7 +164,7 @@ QSlider::groove:horizontal {
 }
 
 QSlider::handle:horizontal {
-    background-color: #cc6604; /* Slider handle color */
+    background-color: #BD632F; /* Slider handle color */
     width: 10px;
     margin: -4px; /* Margins for positioning */
     border-radius: 3px; /* Rounded handle */
@@ -175,7 +175,7 @@ QSlider::handle:horizontal:hover {
 }
 
 QSlider::sub-page:horizontal {
-    background-color: #cc6604; /* Color of the filled part before the handle */
+    background-color: #BD632F; /* Color of the filled part before the handle */
 }
 
 QSlider::add-page:horizontal {
@@ -194,14 +194,14 @@ QCheckBox {
 QCheckBox::indicator {
     width: 10px;  /* Set the size of the checkbox */
     height: 10px;
-    border: 2px solid #cc6604; /* Color of the checkbox border */
+    border: 2px solid #D8973C; /* Color of the checkbox border */
     background-color: #333333; /* Background color when unchecked */
     border-radius: 3px; /* Optional: rounded corners for checkbox */
 }
 
 QCheckBox::indicator:checked {
-    background-color: #cc6604; /* Background color when checked */
-    border: 2px solid #cc6604; /* Border when checked */
+    background-color: #BD632F; /* Background color when checked */
+    border: 2px solid #D8973C; /* Border when checked */
 }
 
 /* ScrollBar Styles */

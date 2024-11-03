@@ -330,7 +330,7 @@ def keyboard_interrupt_handler(signal, frame):
 
 def load_stylesheet(app):
     # Get the absolute path of the stylesheet file
-    style_file = os.path.join(os.path.dirname(__file__), "Preferences/style_dark.qss")
+    style_file = os.path.join(os.path.dirname(__file__), "Preferences/style_light.qss")
 
     # Read the content of the stylesheet
     with open(style_file, "r") as f:

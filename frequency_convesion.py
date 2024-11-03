@@ -226,6 +226,8 @@ class SensorPlot(QMainWindow):
         z_accel = data['Z Acceleration'].to_numpy()[start_index:end_index]
         time = data['Time [microseconds]'].to_numpy()[start_index:end_index]
 
+        print(len(z_accel))
+
         N = len(z_accel)
         if N < 2:  # FFT requires at least 2 points
             print("Not enough data points for FFT.")
