@@ -308,8 +308,6 @@ class PlotFFT(QWidget):
         self.plot_widget_time.clear()
 
         pen1 = pg.mkPen(color='#2541B2')
-        pen2 = pg.mkPen(color='#1768AC')
-        pen3 = pg.mkPen(color='#06BEE1')
 
         # Plot the selected acceleration axis
         self.plot_widget_time.plot(time, accel_data, pen=pen1, name=selected_axis)
