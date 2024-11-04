@@ -1,0 +1,222 @@
+/* Common colors */
+QMainWindow {
+    background-color: #F5F5F5; /* Light background */
+}
+
+/* Button Styles */
+QPushButton {
+    background-color: #1e81b0; /* Button color (light green) */
+    color: black; /* Text color */
+    border: none;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    border-radius: 10px; /* Rounded corners */
+}
+
+QPushButton:hover {
+    background-color: #CDE6F5; /* Button hover color */
+    cursor: pointer;
+}
+
+/* Label Styles */
+QLabel {
+    font-size: 12px;
+    font-weight: bold;
+    border-radius: 5px; /* Optional if you want rounded labels */
+    color: #333333; /* General label color (dark gray) */
+}
+
+#combo_label {
+    color: #333333; /* Color for specific label */
+}
+
+#heading_label {
+    color: #333333; /* Color for heading label */
+    font-size: 18px;
+}
+
+/* Scroll Area Styles */
+#scroll, QScrollArea {
+    background-color: #F0F0F0; /* Scroll area background */
+    border: none;
+}
+
+/* Text Edit and Line Edit Styles */
+QTextEdit, QLineEdit {
+    background-color: #FFFFFF; /* Light background color */
+    color: black; /* Text color */
+    font-size: 12px;
+    border-radius: 10px; /* Rounded corners */
+    border: 1px solid #CCCCCC; /* Border for QTextEdit */
+}
+
+/* General Widget Styles */
+QWidget {
+    /* border-radius: 10px;*/
+}
+
+/* Dialog Styles */
+QDialog {
+    background-color: #F5F5F5; /* Background color for dialogs */
+}
+
+/* Menu Styles */
+QMenu {
+    background-color: #FFFFFF; /* Menu background */
+    color: black; /* Text color */
+}
+
+QMenu::item {
+    background-color: #FFFFFF; /* Default item background */
+}
+
+QMenu::item:selected {
+    background-color: #1e81b0; /* Highlight color for selected item */
+}
+
+/* ToolTip Styles */
+QToolTip {
+    background-color: #FFFFFF; /* Light background for tooltips */
+    color: black; /* Text color */
+    border: 1px solid #CCCCCC; /* Border for tooltips */
+}
+
+/* ComboBox Item View Styles */
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF; /* Background color for dropdown items */
+    color: black; /* Text color for dropdown items */
+}
+
+/* Message Box Styles */
+QMessageBox {
+    background-color: #F5F5F5; /* Background color for message box */
+    color: black; /* Text color */
+}
+
+QMessageBox QScrollBar:vertical {
+    background-color: #F0F0F0;
+    width: 12px;
+    margin: 0px;
+}
+
+/* Graph Styles */
+#graphy {
+    border-radius: 10px; /* Rounded corners */
+    background-color: #2b2b2b; /* Background for graph container */
+}
+
+/* Tab Widget styles */
+QTabWidget::pane {
+    border: 3px solid #E0E0E0; /* Tab pane border color */
+    background: #F0F0F0; /* Background for tab pane */
+}
+
+QTabBar::tab {
+    background: #FFFFFF; /* Tab background */
+    color: #333333; /* Tab text color */
+    padding: 10px;
+    border: 1px solid #CCCCCC; /* Tab border color */
+    border-bottom-color: #CCCCCC; /* Bottom border color */
+    border-top-left-radius: 0px; /* No rounded corners */
+    border-top-right-radius: 0px; /* No rounded corners */
+}
+
+QTabBar::tab:selected, QTabBar::tab:hover {
+    background: #E0E0E0; /* Background for selected/hovered tab */
+    color: black; /* Text color for selected/hovered tab */
+}
+
+QTabBar::tab:selected {
+    border-color: #CCCCCC; /* Border color for selected tab */
+    border-bottom-color: #F0F0F0; /* Bottom border color for selected tab */
+}
+
+/* Slider styles */
+QSlider::groove:horizontal {
+    background-color: #E0E0E0; /* Slider track color */
+    height: 6px;
+    border-radius: 7px; /* Rounded corners */
+}
+
+QSlider::handle:horizontal {
+    background-color: #1e81b0; /* Slider handle color */
+    width: 10px;
+    margin: -4px; /* Margins for positioning */
+    border-radius: 3px; /* Rounded handle */
+}
+
+QSlider::handle:horizontal:hover {
+    background-color: #CDE6F5; /* Handle hover effect */
+}
+
+QSlider::sub-page:horizontal {
+    background-color: #1e81b0; /* Color of the filled part before the handle */
+}
+
+QSlider::add-page:horizontal {
+    background-color: #F0F0F0; /* Color of the unfilled part after the handle */
+}
+
+/* QCheckBox Styles */
+QCheckBox {
+    color: #333333;  /* Dark text color */
+    font-size: 12px;
+    font-weight: bold;
+    text-align: left; /* Ensure the text is left-aligned */
+    padding-right: 30px; /* Make space for the checkbox indicator */
+}
+
+QCheckBox::indicator {
+    width: 10px;  /* Set the size of the checkbox */
+    height: 10px;
+    border: 2px solid #1e81b0; /* Color of the checkbox border */
+    background-color: #F0F0F0; /* Background color when unchecked */
+    border-radius: 3px; /* Optional: rounded corners for checkbox */
+}
+
+QCheckBox::indicator:checked {
+    background-color: #1e81b0; /* Background color when checked */
+    border: 2px solid #1e81b0; /* Border when checked */
+}
+
+/* ComboBox Styles */
+QComboBox {
+    background-color: #FFFFFF; /* Light background */
+    color: #333333; /* Dark text */
+    border: 1px solid #CCCCCC;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QComboBox:hover {
+    background-color: #E0E0E0; /* Hover background color */
+}
+
+QComboBox:drop-down {
+    border: 1px solid #CCCCCC;
+    width: 4px;
+}
+
+/* ScrollBar Styles */
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #CCCCCC;
+    min-height: 20px;
+    margin: 3px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #BBBBBB;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}

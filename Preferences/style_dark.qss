@@ -5,7 +5,7 @@ QMainWindow {
 
 /* Button Styles */
 QPushButton {
-    background-color: #cc6604; /* Button color */
+    background-color: #BD632F; /* Button color */
     color: white; /* Text color */
     border: none;
     padding: 8px 16px;
@@ -16,7 +16,6 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #5e4125; /* Button hover color */
-    cursor: pointer;
 }
 
 /* Label Styles */
@@ -40,12 +39,33 @@ QLabel {
 QComboBox {
     padding: 4px;
     font-size: 12px;
+    background-color: #2b2b2b;
+    color: #ffffff;
+    border: 1px solid #3d3d3d;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QComboBox:hover {
+    background-color: #323232;
+}
+
+QComboBox:drop-down {
+    border: 1px;
+    width: 4px;
+}
+
+/* ComboBox Item View Styles */
+QComboBox QAbstractItemView {
+    background-color: #444444; /* Background color for dropdown items */
+    color: white; /* Text color for dropdown items */
 }
 
 /* Scroll Area Styles */
 #scroll {
-    background-color: #333333; /* Scroll area background */
-    border: none;
+    background-color: #2b2b2b; /* Scroll area background */
+    border-radius: 10px; /* Rounded corners */
+    border: 2px;
 }
 
 QScrollArea {
@@ -54,22 +74,17 @@ QScrollArea {
 }
 
 /* Text Edit and Line Edit Styles */
-QTextEdit {
+QTextEdit, QLineEdit {
     background-color: #1e1e1e; /* Background color */
     color: white; /* Text color */
     font-size: 12px;
     border-radius: 10px; /* Rounded corners */
-}
-
-QLineEdit {
-    background-color: #1e1e1e; /* Background color */
-    color: white; /* Text color */
-    border-radius: 10px; /* Rounded corners */
+    border: 1px solid #404040; /* Border for QTextEdit */
 }
 
 /* General Widget Styles */
 QWidget {
-    /* border-radius: 10px; */
+    /* border-radius: 10px;*/
 }
 
 /* Dialog Styles */
@@ -84,11 +99,11 @@ QMenu {
 }
 
 QMenu::item {
-    background-color: transparent; /* Default item background */
+    background-color: #444444; /* Default item background */
 }
 
 QMenu::item:selected {
-    background-color: #cc6604; /* Highlight color for selected item */
+    background-color: #BD632F; /* Highlight color for selected item */
 }
 
 /* ToolTip Styles */
@@ -97,16 +112,16 @@ QToolTip {
     color: white; /* Text color */
 }
 
-/* ComboBox Item View Styles */
-QComboBox QAbstractItemView {
-    background-color: #444444; /* Background color for dropdown items */
-    color: white; /* Text color for dropdown items */
-}
-
 /* Message Box Styles */
 QMessageBox {
     background-color: #333333; /* Background color for message box */
     color: white; /* Text color */
+}
+
+QMessageBox QScrollBar:vertical {
+    background-color: #2b2b2b;
+    width: 12px;
+    margin: 0px;
 }
 
 /* Graph Styles */
@@ -155,9 +170,9 @@ QSlider::groove:horizontal {
 }
 
 QSlider::handle:horizontal {
-    background-color: #cc6604; /* Slider handle color */
+    background-color: #BD632F; /* Slider handle color */
     width: 10px;
-    margin: -4px px; /* Margins for positioning */
+    margin: -4px; /* Margins for positioning */
     border-radius: 3px; /* Rounded handle */
 }
 
@@ -166,15 +181,54 @@ QSlider::handle:horizontal:hover {
 }
 
 QSlider::sub-page:horizontal {
-    background-color: #cc6604; /* Color of the filled part before the handle */
+    background-color: #BD632F; /* Color of the filled part before the handle */
 }
 
 QSlider::add-page:horizontal {
     background-color: #333333; /* Color of the unfilled part after the handle */
 }
 
-/* PyQtGraph custom background colors */
-#graphy {
-    border-radius: 10px; /* Rounded corners */
-    background-color: #2b2b2b; /* Background for graph container */
+/* QCheckBox Styles */
+QCheckBox {
+    color: #CCCCCC;  /* Set the text color */
+    font-size: 12px;
+    font-weight: bold;
+    text-align: left; /* Ensure the text is left-aligned */
+    padding-right: 30px; /* Make space for the checkbox indicator */
+}
+
+QCheckBox::indicator {
+    width: 10px;  /* Set the size of the checkbox */
+    height: 10px;
+    border: 2px solid #D8973C; /* Color of the checkbox border */
+    background-color: #333333; /* Background color when unchecked */
+    border-radius: 3px; /* Optional: rounded corners for checkbox */
+}
+
+QCheckBox::indicator:checked {
+    background-color: #BD632F; /* Background color when checked */
+    border: 2px solid #D8973C; /* Border when checked */
+}
+
+/* ScrollBar Styles */
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 12px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background-color: #666666;
+    min-height: 20px;
+    margin: 3px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: #777777;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
 }
