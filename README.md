@@ -1,7 +1,3 @@
-Here's a README that can serve as a foundational document for this project. You may need to add more details as the project evolves, especially if you add features or change dependencies.
-
----
-
 # Vibrational Natural Frequency Analyzer
 
 **Liberty University Capstone Project, Team 8**
