@@ -19,8 +19,6 @@ This repository contains software designed by Team 8 from Liberty University as 
 - [Usage](#usage)
 - [Dependencies](#dependencies)
 - [File Structure](#file-structure)
-- [Contributing](#contributing)
-- [License](#license)
 
 ---
 
@@ -47,8 +45,8 @@ Make sure Python 3.7+ is installed on your system.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-username/vibrational-frequency-analyzer.git
-   cd vibrational-frequency-analyzer
+   git clone https://github.com/L0GIC0L/Team_M8_Code.git
+   cd Team_M8_Code
    ```
 
 2. Install the required dependencies:
@@ -77,22 +75,28 @@ python main.py
 
 The software relies on the following libraries:
 
-- **PyQt5** - for creating the graphical user interface
+- **PyQt6** - for creating the graphical user interface
 - **PyQtGraph** - for plotting and visualizing frequency data
-- **NumPy** (if applicable) - for numerical computations
+- **NumPy**  - for numerical computations
+- **Pandas** - for file logging
+- **PGlive** - for live plotting
+- **SciPy** - for FFT and data manipulation
 
 Install these using `pip install -r requirements.txt` or individually as shown below:
 ```bash
-pip install pyqt6 pyqtgraph numpy scipy
+pip install pyqt6 pyqtgraph numpy scipy pglive pandas
 ```
 
 ## File Structure
 
 Here's an overview of the primary files and directories in this repository:
 
-- **main.py** - Main entry point for the application
-- **/ui/** - Directory containing UI components and layouts
-- **/data/** - Directory for storing input or output data files
-- **/utils/** - Utility scripts for various helper functions
+- **New_PGLive.py** - Main entry point for the application
+- **/Samples/** - Directory containing captured example samples
+- **/Preferences/** - Directory for storing stylesheets and settings
+- **/Cached_Samples/** - Directory containing random samples cached by the application
+- **/Arduino_Scripts/** - Directory containing the utilized arduino scripts
+- **/Outdated/** - Directory containing old versions of the application
+
 
 > You can add specific details on additional files as needed.

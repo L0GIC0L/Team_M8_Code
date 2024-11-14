@@ -1,3 +1,8 @@
+"""
+This edition makes use of the PGLive library, which extends the functionality of pyqtgraph to include liveplots. It
+replaces the rolling buffer system used previously and greatly streamlines the code.
+"""
+
 import csv
 import os
 import signal
@@ -17,6 +22,11 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPu
     QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox, \
     QSlider
 from PyQt6.QtGui import QPalette, QColor
+
+from pglive.sources.data_connector import DataConnector
+from pglive.sources.live_axis_range import LiveAxisRange
+from pglive.sources.live_plot import LiveLinePlot
+from pglive.sources.live_plot_widget import LivePlotWidget
 
 class SerialReader(QThread):
     # Define a generic data_received signal with sensor_id
@@ -40,13 +50,13 @@ class SerialReader(QThread):
         self.start_serial()
 
     def set_speed(self, speed = "400"):
-        if self.serial.write((str(speed) + '\n').encode()) & self.serial.open(QIODevice.OpenModeFlag.ReadOnly):
+        if self.serial.write((str(speed) + '\n').encode()) & self.serial.open(QIODevice.OpenModeFlag.ReadWrite):
             print(f"Successfully changed speed to {speed}.")
         else:
             print(f"Failed to set speed to {speed}.")
 
     def start_serial(self):
-        if not self.serial.open(QIODevice.OpenModeFlag.ReadOnly):
+        if not self.serial.open(QIODevice.OpenModeFlag.ReadWrite):
             print(f"Failed to open port {self.serial.portName()}")
         else:
             print(f"Connected to {self.serial.portName()}!")
@@ -73,47 +83,6 @@ class SerialReader(QThread):
         if self.serial.isOpen():
             self.serial.close()
 
-class CircularBuffer:
-    def __init__(self, capacity):
-        """Initialize the circular buffer with a fixed capacity."""
-        self.capacity = capacity
-        self.buffer = []
-        self.start = 0  # Points to the oldest element
-        self.count = 0  # Number of elements in the buffer
-
-    def append(self, item):
-        """Append a new item to the buffer, overwriting the oldest data if full."""
-        if self.count < self.capacity:
-            # Buffer not full, simply append
-            self.buffer.append(item)
-            self.count += 1
-        else:
-            # Buffer full, overwrite the oldest element
-            self.buffer[self.start] = item
-            self.start = (self.start + 1) % self.capacity  # Move start pointer
-
-    def get_all(self):
-        """Retrieve all elements in the buffer in the correct order."""
-        if self.count < self.capacity:
-            return self.buffer[:]
-        else:
-            # Return items in the correct order from oldest to newest
-            return self.buffer[self.start:] + self.buffer[:self.start]
-
-    def get_latest(self):
-        """Retrieve the latest items in the buffer."""
-        return self.get_all()
-
-    def is_full(self):
-        """Check if the buffer is full."""
-        return self.count == self.capacity
-
-    def clear(self):
-        """Reset the buffer to empty state."""
-        self.buffer = []
-        self.start = 0
-        self.count = 0
-
 class DataRecorder:
     def __init__(self):
         super().__init__()
@@ -132,7 +101,7 @@ class DataRecorder:
     def record_data(self, timeus, sensor_id, accel_x, accel_y, accel_z):
         if self.recording:
             # Append the new data to the records
-            self.data_records.append([timeus, sensor_id, accel_x, accel_y, accel_z])
+            self.data_records.append([int(timeus), sensor_id, accel_x, accel_y, accel_z])
 
     def export_data(self):
         if len(self.data_records) > 0:
@@ -267,7 +236,7 @@ class PlotFFT(QWidget):
         self.plot_mode = "FFT"  # Default mode
 
     def toggle_plot(self):
-        """Toggle between PSD and FFT plotting."""
+        # Toggle between PSD and FFT plotting.
         if self.plot_mode == "FFT":
             self.plot_mode = "PSD"
             self.toggle_button.setText("Show FFT")
@@ -295,6 +264,7 @@ class PlotFFT(QWidget):
                 self.accel_id_selection.addItems([str(id) for id in unique_ids])
 
             return data
+
         except Exception as e:
             print(f"Error loading data: {e}")
             return pd.DataFrame()
@@ -324,36 +294,49 @@ class PlotFFT(QWidget):
         # Filter by selected accelerometer ID first
         selected_id = self.accel_id_selection.currentText()
         if selected_id and 'Accelerometer ID' in data.columns:
-            data = data[data['Accelerometer ID'].astype(str) == selected_id]
+            newdata = data[data['Accelerometer ID'].astype(str) == selected_id]
+        else:
+            # If no accelerometer ID is selected or the column is missing, return the data unfiltered
+            newdata = data
 
+        # Check if newdata is empty after accelerometer ID filtering
+        if newdata.empty:
+            print("No data found for the selected Accelerometer ID.")
+            return newdata  # Return the empty dataframe
+
+        # Calculate percentiles for each column
         percentiles = {
-            'time': data['Time [microseconds]'].quantile([0.005, 0.995]),
-            'z_accel': data['X Acceleration'].quantile([0.005, 0.995]),
-            'y_accel': data['Y Acceleration'].quantile([0.005, 0.995]),
-            'z_accel': data['Z Acceleration'].quantile([0.005, 0.995]),
+            'time': newdata['Time [microseconds]'].quantile([0.001, 0.999]),
+            'x_accel': newdata['X Acceleration'].quantile([0.001, 0.999]),
+            'y_accel': newdata['Y Acceleration'].quantile([0.001, 0.999]),
+            'z_accel': newdata['Z Acceleration'].quantile([0.001, 0.999]),
         }
 
-        data_filtered = data[
-            (data['Time [microseconds]'] >= percentiles['time'].iloc[0]) &
-            (data['Time [microseconds]'] <= percentiles['time'].iloc[1]) &
-            (data['X Acceleration'] >= percentiles['z_accel'].iloc[0]) &
-            (data['X Acceleration'] <= percentiles['z_accel'].iloc[1]) &
-            (data['Y Acceleration'] >= percentiles['y_accel'].iloc[0]) &
-            (data['Y Acceleration'] <= percentiles['y_accel'].iloc[1]) &
-            (data['Z Acceleration'] >= percentiles['z_accel'].iloc[0]) &
-            (data['Z Acceleration'] <= percentiles['z_accel'].iloc[1])
+        # Apply filtering conditions based on the calculated percentiles
+        data_filtered = newdata[
+            (newdata['Time [microseconds]'] >= percentiles['time'].iloc[0]) &
+            (newdata['Time [microseconds]'] <= percentiles['time'].iloc[1]) &
+            (newdata['X Acceleration'] >= percentiles['x_accel'].iloc[0]) &
+            (newdata['X Acceleration'] <= percentiles['x_accel'].iloc[1]) &
+            (newdata['Y Acceleration'] >= percentiles['y_accel'].iloc[0]) &
+            (newdata['Y Acceleration'] <= percentiles['y_accel'].iloc[1]) &
+            (newdata['Z Acceleration'] >= percentiles['z_accel'].iloc[0]) &
+            (newdata['Z Acceleration'] <= percentiles['z_accel'].iloc[1])
             ]
 
         return data_filtered
 
     def setup_sliders(self):
-        """Setup the sliders based on the filtered data."""
+        # Setup the sliders based on the filtered data.
+        # This ugly fix is necessary to prevent slider values over extending thier limits.
+        scaleconstant = 100000
+
         if self.data_filtered.empty:
             return  # Do not set up sliders if there's no data
 
-        time_values = self.data_filtered['Time [microseconds]'].to_numpy()
-        min_time = int(time_values[0])
-        max_time = int(time_values[-1])
+        time_values = (self.data_filtered['Time [microseconds]'].to_numpy())/scaleconstant
+        min_time = (int(time_values[0]))
+        max_time = (int(time_values[-1]))
 
         # Set the range based on actual time values
         self.start_time_slider.setRange(min_time, max_time)
@@ -367,9 +350,9 @@ class PlotFFT(QWidget):
         self.update_labels()
 
     def update_labels(self):
-        """Update the labels to show actual time values and tolerance."""
-        start_time = self.start_time_slider.value()  # Get actual time values from sliders
-        end_time = self.end_time_slider.value()
+        # Update the labels to show actual time values and tolerance.
+        start_time = (self.start_time_slider.value() )*scaleconstant # Get actual time values from sliders
+        end_time = (self.end_time_slider.value() )*scaleconstant
         tolerance_value = self.tolerance_slider.value()
 
         # Update the labels with the actual time values
@@ -378,7 +361,7 @@ class PlotFFT(QWidget):
         self.tolerance_label.setText(f"Tolerance: {tolerance_value} dB")
 
     def update_plot(self):
-        """Update the plots based on the current slider values."""
+        # Update the plots based on the current slider values.
         if self.data.empty:
             print("No data to plot.")
             return
@@ -391,8 +374,8 @@ class PlotFFT(QWidget):
             return
 
         # Get current time values from sliders
-        start_time = self.start_time_slider.value()
-        end_time = self.end_time_slider.value()
+        start_time = (self.start_time_slider.value())*scaleconstant
+        end_time = (self.end_time_slider.value())*scaleconstant
 
         # Update labels to reflect current slider values
         self.update_labels()
@@ -469,7 +452,7 @@ class PlotFFT(QWidget):
             f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)")
 
     def export_data(self):
-        """Export trimmed data, frequency and magnitude data, and natural frequencies to CSV files if available."""
+        # Export trimmed data, frequency and magnitude data, and natural frequencies to CSV files if available.
         if self.data_filtered.empty:
             print("No data to export.")
             return
@@ -515,7 +498,7 @@ class PlotFFT(QWidget):
                 print("Natural frequency data is not available for export.")
 
     def open_csv(self):
-        """Open a file dialog to select and load a CSV file."""
+        # Open a file dialog to select and load a CSV file.
         file_dialog = QFileDialog()
         file_path, _ = file_dialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
 
@@ -545,19 +528,12 @@ class SerialPlotterWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         self.plot_tab = QWidget()
         self.plot_layout = QGridLayout()
-        self.data_buffers = {}
-        self.plot_data_items = {}
+        self.data_connectors = {}
 
         # Initialize SerialReader
         self.serial_reader = SerialReader()
         self.serial_reader.data_received.connect(self.update_data_buffers)
         self.serial_reader.start_serial()  # Start reading from the default port
-
-        # Create a QTimer for controlled plot updates
-        self.plot_timer = QTimer(self)
-        self.plot_timer.setInterval(1)  # Refresh approximately every 30ms
-        self.plot_timer.timeout.connect(self.update_plots)
-        self.plot_timer.start()
 
         # Options Menu
         self.setup_options_menu()
@@ -567,7 +543,7 @@ class SerialPlotterWindow(QMainWindow):
         self.tab_widget.addTab(self.plot_tab, "Plot Data")
 
         # Add SensorPlot tab
-        self.plot_fft = PlotFFT()
+        self.plot_fft = PlotFFT()  # Assuming PlotFFT is defined elsewhere
         self.tab_widget.addTab(self.plot_fft, "Sensor Data Plot")
 
         # Set the tab widget as the central widget of the main window
@@ -577,20 +553,17 @@ class SerialPlotterWindow(QMainWindow):
         self.init_sensor_data()
 
     def setup_options_menu(self):
-        self.serial_ports = ["/dev/ttyACM0","/dev/ttyACM1","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
+        self.serial_ports = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
         self.current_port_index = 0  # Default to the second port in the list
 
-        self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000,100000]
+        self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000, 100000]
         self.selected_speed_index = 0
-
-        self.buffer_sizes = [1000, 3000, 5000, 7000, 10000, 17500, 30000]
-        self.buffer_capacity = self.buffer_sizes[0]
 
         self.data_recorder = DataRecorder()  # Create an instance of DataRecorder
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumSize(210, 250)
+        scroll_area.setMinimumSize(230, 250)
         scroll_area.setMaximumWidth(210)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -629,16 +602,6 @@ class SerialPlotterWindow(QMainWindow):
         self.communication_speed_combo.currentIndexChanged.connect(self.speed_button)
         content_layout.addWidget(self.communication_speed_combo, 2, 1)
 
-        # Buffer size combo
-        buffer_size_label = QLabel("Buffer Size:")
-        buffer_size_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        content_layout.addWidget(buffer_size_label, 3, 0)
-        buffer_size_combo = QComboBox()
-        buffer_size_combo.addItems([str(size) for size in self.buffer_sizes])
-        buffer_size_combo.setCurrentIndex(0)
-        buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
-        content_layout.addWidget(buffer_size_combo, 3, 1)
-
         # Serial port combo
         serial_port_label = QLabel("COM Port:")
         serial_port_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -649,37 +612,105 @@ class SerialPlotterWindow(QMainWindow):
         self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
         content_layout.addWidget(self.serial_port_combo, 4, 1)
 
+        # Max Points Selection ComboBox
+        max_points_label = QLabel("Max Points:")
+        max_points_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        content_layout.addWidget(max_points_label, 5, 0)  # Adjust row index as needed
+
+        self.max_points_combo = QComboBox()
+        # Populate the dropdown with potential max point sizes (e.g., 100, 200, 400, 600, 800)
+        self.max_points_combo.addItems([str(size) for size in [100, 200, 400, 600, 800]])
+        self.max_points_combo.setCurrentIndex(3)  # Default to 600 if it's the initial size
+        self.max_points_combo.currentIndexChanged.connect(self.update_plot_settings)
+        content_layout.addWidget(self.max_points_combo, 5, 1)  # Adjust row index as needed
+
+        # Communication speed combo
+        update_speed_label = QLabel("Update Speed:")
+        update_speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        content_layout.addWidget(update_speed_label, 6, 0)
+
+        self.update_speed_combo = QComboBox()
+        self.update_speed_combo.addItems([str(i) for i in [10, 20, 30, 40, 50, 60,120,240,480,960]])  # Example FPS options
+        self.update_speed_combo.setCurrentIndex(2)  # Default to 30 FPS (index 2)
+        self.update_speed_combo.currentIndexChanged.connect(self.update_plot_settings)
+        content_layout.addWidget(self.update_speed_combo, 6, 1)
+
         # Start Recording button
         self.record_button = QPushButton("Start Recording")
         self.record_button.clicked.connect(self.toggle_recording)
         self.record_button.setStyleSheet("background-color: #2C6E49; color: white;")
-        content_layout.addWidget(self.record_button, 5, 0, 1, 2)
+        content_layout.addWidget(self.record_button, 7, 0, 1, 2)
 
         # Export Data button
         self.export_button = QPushButton("Export Data")
         self.export_button.clicked.connect(self.export_data)
-        content_layout.addWidget(self.export_button, 6, 0, 1, 2)
+        content_layout.addWidget(self.export_button, 8, 0, 1, 2)
 
         # Finalize the scroll area
         scroll_area.setWidget(content_widget)
         self.plot_layout.addWidget(scroll_area, 0, 3, 3, 1)
 
     def init_sensor_data(self):
-        # Initialize data buffers and plot items for multiple sensors
+        # Initialize data connectors for multiple sensors
         self.sensor_count = 3  # Adjust based on the number of sensors you expect
-        self.data_buffers = {1: {'x': CircularBuffer(self.buffer_capacity),
-                                  'y': CircularBuffer(self.buffer_capacity),
-                                  'z': CircularBuffer(self.buffer_capacity)},
-                             2: {'x': CircularBuffer(self.buffer_capacity),
-                                  'y': CircularBuffer(self.buffer_capacity),
-                                  'z': CircularBuffer(self.buffer_capacity)},
-                             3: {'x': CircularBuffer(self.buffer_capacity),
-                                 'y': CircularBuffer(self.buffer_capacity),
-                                 'z': CircularBuffer(self.buffer_capacity)}}
+        for sensor_id in range(1, self.sensor_count + 1):
+            self.add_sensor_plot(sensor_id,sensor_id-1)
 
-        # Create a single plot widget for each sensor
-        for sensor_id in self.data_buffers.keys():
-            self.plot_data_items[sensor_id] = self.add_graph(f"Sensor {sensor_id}", "Time (samples)", "Acceleration", sensor_id - 1)
+    def add_sensor_plot(self, sensor_id, row, max_points=600,update_rate=30):
+        container_widget = QWidget()
+        container_widget.setObjectName("graphy")  # Set object name
+        container_layout = QVBoxLayout(container_widget)
+        container_layout.setContentsMargins(5, 5, 5, 5)  # Margin to space the PlotWidget from the edges
+
+        sensor_plot_widget = LivePlotWidget(title=f'Sensor ID: {sensor_id}',
+                                            x_range_controller=LiveAxisRange(),
+                                            y_range_controller=LiveAxisRange())
+        sensor_plot_widget.setBackground("#2b2b2b")
+
+        colors = ["red", "orange", "cyan"]  # Colors for X, Y, Z respectively
+
+        for i, axis in enumerate(['X', 'Y', 'Z']):
+            plot = LiveLinePlot(pen=colors[i])
+            sensor_plot_widget.addItem(plot)
+            connector = DataConnector(plot, max_points=max_points, update_rate=update_rate)
+            self.data_connectors[(sensor_id, axis)] = connector
+
+        # Add the PlotWidget to the container's layout
+        container_layout.addWidget(sensor_plot_widget)
+
+        # Add the container to the main layout
+        self.plot_layout.addWidget(container_widget, row, 0)
+
+    def update_plot_settings(self):
+        # Get the selected max points value from the max points dropdown
+        selected_max_points = int(self.max_points_combo.currentText())
+
+        # Get the selected update speed (in FPS) from the update speed dropdown
+        selected_update_rate = int(self.update_speed_combo.currentText())
+
+        # Remove existing sensor plots and their connectors
+        for sensor_id in list(self.data_connectors.keys()):
+            # Remove the sensor's plot (if needed)
+            self.remove_sensor_plot(sensor_id)
+
+        # Re-add all sensor plots with the new max_points and update_rate values
+        for sensor_id in range(1, self.sensor_count + 1):
+            self.add_sensor_plot(sensor_id, sensor_id - 1, max_points=selected_max_points, update_rate=selected_update_rate)
+
+    def remove_sensor_plot(self, sensor_id):
+        # Helper method to remove a plot and its connector
+        # Iterate over all children in the layout and find the container for this sensor
+        for widget in self.plot_layout.findChildren(QWidget):
+            if widget.findChild(LivePlotWidget):
+                plot_widget = widget.findChild(LivePlotWidget)
+                if plot_widget.title() == f'Sensor ID: {sensor_id}':
+                    # Remove the widget from the layout and clean up the data connector
+                    self.plot_layout.removeWidget(widget)
+                    widget.deleteLater()
+                    # Remove the corresponding data connectors
+                    for axis in ['X', 'Y', 'Z']:
+                        self.data_connectors[(sensor_id, axis)] = None
+                    return  # Stop once the correct plot is found and removed
 
     def speed_button(self):
         selected_speed = int(self.communication_speed_combo.currentText())
@@ -691,72 +722,25 @@ class SerialPlotterWindow(QMainWindow):
         print(f"Attempting to change port to {selected_port}...")
         self.serial_reader.set_port(selected_port)
 
-    def add_graph(self, name, x_label, y_label, row):
-        # Outer widget to hold the PlotWidget with rounded corners
-        container_widget = QWidget()
-        container_widget.setObjectName("graphy")  # Set object name
-        container_layout = QVBoxLayout(container_widget)
-        container_layout.setContentsMargins(5, 5, 5, 5)  # Margin to space the PlotWidget from the edges
-
-        # Graph widget (PlotWidget) with the actual plot
-        graph_widget = pg.PlotWidget()
-        graph_widget.setBackground("#2b2b2b")
-        graph_widget.showGrid(False, True)
-        graph_widget.setLabel("left", y_label)
-        graph_widget.setLabel("bottom", x_label)
-        graph_widget.setMouseEnabled(x=True, y=False)
-        graph_widget.setClipToView(True)
-        graph_widget.setMinimumSize(200, 150)
-        graph_widget.setYRange(-10, 10)
-
-        # Add the PlotWidget to the container's layout
-        container_layout.addWidget(graph_widget)
-
-        # Add the container to the main layout
-        self.plot_layout.addWidget(container_widget, row, 0)
-
-        # Create a curve for each axis with a different color
-        curve_x = graph_widget.plot([], pen='r', name='X Acceleration')
-        curve_y = graph_widget.plot([], pen='g', name='Y Acceleration')
-        curve_z = graph_widget.plot([], pen='b', name='Z Acceleration')
-
-        return (curve_x, curve_y, curve_z)
-
     def update_data_buffers(self, sensor_id, timeus, accel_x, accel_y, accel_z):
         sensor_id = int(sensor_id)  # Convert sensor_id to int
         self.data_recorder.record_data(timeus, sensor_id, accel_x, accel_y, accel_z)  # Record the data
-        if sensor_id in self.data_buffers:
-            self.data_buffers[sensor_id]['x'].append(accel_x)
-            self.data_buffers[sensor_id]['y'].append(accel_y)
-            self.data_buffers[sensor_id]['z'].append(accel_z)
 
-    def update_plots(self):
-        for sensor_id in self.data_buffers.keys():
-            x_data = self.data_buffers[sensor_id]['x'].get_all()
-            y_data = self.data_buffers[sensor_id]['y'].get_all()
-            z_data = self.data_buffers[sensor_id]['z'].get_all()
-
-            # Update each curve for the current sensor
-            curve_x, curve_y, curve_z = self.plot_data_items[sensor_id]
-            curve_x.setData(range(len(x_data)), x_data)
-            curve_y.setData(range(len(y_data)), y_data)
-            curve_z.setData(range(len(z_data)), z_data)
-
-    def change_buffer_size(self, index):
-        self.buffer_capacity = self.buffer_sizes[index]
-        for sensor_id in self.data_buffers.keys():
-            # Reset the circular buffers with the new size
-            self.data_buffers[sensor_id]['x'] = CircularBuffer(self.buffer_capacity)
-            self.data_buffers[sensor_id]['y'] = CircularBuffer(self.buffer_capacity)
-            self.data_buffers[sensor_id]['z'] = CircularBuffer(self.buffer_capacity)
+        # Append data to the corresponding live plot connectors
+        self.data_connectors[(sensor_id, 'X')].cb_append_data_point(accel_x, x=timeus)
+        self.data_connectors[(sensor_id, 'Y')].cb_append_data_point(accel_y, x=timeus)
+        self.data_connectors[(sensor_id, 'Z')].cb_append_data_point(accel_z, x=timeus)
 
     def toggle_plotting(self, state):
         if state == 0:  # 0 means unchecked
             print("Stopping plot updates...")  # Debugging line
-            self.plot_timer.stop()  # Stop the timer when unchecked
+            for connector in self.data_connectors.values():
+                connector.clear()  # Clear the data if needed
+                connector.pause()
         elif state == 2:  # 2 means checked
             print("Starting plot updates...")  # Debugging line
-            self.plot_timer.start()  # Start the timer when checked
+            for connector in self.data_connectors.values():
+                connector.resume()
 
     def toggle_recording(self):
         if self.record_button.text() == "Start Recording":
@@ -764,15 +748,12 @@ class SerialPlotterWindow(QMainWindow):
             self.data_recorder.start_recording()
             self.record_button.setText("Stop Recording")
             self.record_button.setStyleSheet("background-color: #A4243B; color: white;")
-            # Enable other UI elements if needed, or disable them for recording
-
         else:
             # Stop recording
             self.data_recorder.stop_recording()
             self.record_button.setText("Start Recording")
             self.record_button.setStyleSheet("background-color: #2C6E49; color: white;")
             self.data_recorder.export_default()
-            # Re-enable or reset other UI elements if needed
 
     def export_data(self):
         self.data_recorder.export_data()

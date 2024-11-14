@@ -306,7 +306,7 @@ def main():
     app = QApplication(sys.argv)
 
     # Load the stylesheet
-    with open("Preferences/style_dark.qss", "r") as style_file:
+    with open("../Preferences/style_dark.qss", "r") as style_file:
         app.setStyleSheet(style_file.read())
 
     main_win = SensorPlot()
