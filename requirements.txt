@@ -2,5 +2,5 @@ numpy
 pandas
 pyqtgraph
 scipy
-PyQt6
+pyside6
 pglive

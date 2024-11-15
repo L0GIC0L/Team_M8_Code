@@ -2,7 +2,6 @@
 This edition makes use of the PGLive library, which extends the functionality of pyqtgraph to include liveplots. It
 replaces the rolling buffer system used previously and greatly streamlines the code.
 """
-
 import csv
 import os
 import signal
@@ -16,21 +15,23 @@ import pyqtgraph as pg
 
 from scipy.signal import find_peaks
 
-from PyQt6.QtCore import QIODevice, Qt,QTimer, QThread, pyqtSignal
-from PyQt6.QtSerialPort import QSerialPort
-from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
+from PySide6.QtCore import QIODevice, Qt, QTimer, QThread, Signal
+from PySide6.QtSerialPort import QSerialPort
+from PySide6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
     QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox, \
     QSlider
-from PyQt6.QtGui import QPalette, QColor
+from PySide6.QtGui import QPalette, QColor
 
 from pglive.sources.data_connector import DataConnector
 from pglive.sources.live_axis_range import LiveAxisRange
 from pglive.sources.live_plot import LiveLinePlot
 from pglive.sources.live_plot_widget import LivePlotWidget
 
+
+
 class SerialReader(QThread):
     # Define a generic data_received signal with sensor_id
-    data_received = pyqtSignal(str, float, float, float, float)
+    data_received = Signal(str, float, float, float, float)
 
     def __init__(self, port_name="/dev/ttyACM0", baud_rate=1000000):
         super().__init__()
@@ -768,10 +769,20 @@ def load_stylesheet(app):
 
 def main():
     app = QApplication(sys.argv)
-    load_stylesheet(app)
-    main = SerialPlotterWindow()
-    main.show()
-    sys.exit(app.exec())
+    try:
+        load_stylesheet(app)
+    except FileNotFoundError as e:
+        print(f"Failed to load stylesheet: File not found. {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred while loading the stylesheet: {e}")
+    finally:
+        try:
+            main_window = SerialPlotterWindow()
+            main_window.show()
+            sys.exit(app.exec())
+        except Exception as e:
+            print(f"An unexpected error occurred while starting the application: {e}")
+
 
 if __name__ == "__main__":
     main()
