@@ -326,15 +326,15 @@ class PlotFFT(QWidget):
 
         return data_filtered
 
+
     def setup_sliders(self):
         # Setup the sliders based on the filtered data.
         # This ugly fix is necessary to prevent slider values over extending thier limits.
-        scaleconstant = 100000
 
         if self.data_filtered.empty:
             return  # Do not set up sliders if there's no data
 
-        time_values = (self.data_filtered['Time [microseconds]'].to_numpy())/scaleconstant
+        time_values = (self.data_filtered['Time [microseconds]'].to_numpy())/100000
         min_time = (int(time_values[0]))
         max_time = (int(time_values[-1]))
 
@@ -351,8 +351,8 @@ class PlotFFT(QWidget):
 
     def update_labels(self):
         # Update the labels to show actual time values and tolerance.
-        start_time = (self.start_time_slider.value() )*scaleconstant # Get actual time values from sliders
-        end_time = (self.end_time_slider.value() )*scaleconstant
+        start_time = (self.start_time_slider.value() )*100000 # Get actual time values from sliders
+        end_time = (self.end_time_slider.value() )*100000
         tolerance_value = self.tolerance_slider.value()
 
         # Update the labels with the actual time values
@@ -374,8 +374,8 @@ class PlotFFT(QWidget):
             return
 
         # Get current time values from sliders
-        start_time = (self.start_time_slider.value())*scaleconstant
-        end_time = (self.end_time_slider.value())*scaleconstant
+        start_time = (self.start_time_slider.value())*100000
+        end_time = (self.end_time_slider.value())*100000
 
         # Update labels to reflect current slider values
         self.update_labels()
