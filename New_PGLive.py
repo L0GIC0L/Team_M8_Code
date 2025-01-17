@@ -491,7 +491,7 @@ class PlotFFT(QWidget):
         start_time = self.start_time_slider.value()
         end_time = self.end_time_slider.value()
 
-        # Filter the data within the selected time range
+        # Filter the data within the selected time range jake
         trimmed_data = self.data_filtered[
             (self.data_filtered['Time [microseconds]'] >= start_time) &
             (self.data_filtered['Time [microseconds]'] <= end_time)
