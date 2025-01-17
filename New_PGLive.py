@@ -2,6 +2,7 @@
 This edition makes use of the PGLive library, which extends the functionality of pyqtgraph to include liveplots. It
 replaces the rolling buffer system used previously and greatly streamlines the code.
 """
+
 import csv
 import os
 import signal
@@ -13,14 +14,14 @@ import numpy as np
 import pandas as pd
 import pyqtgraph as pg
 
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, get_window, welch, butter, filtfilt
+from scipy.fft import fft, fftfreq
 
 from PySide6.QtCore import QIODevice, Qt, QTimer, QThread, Signal
 from PySide6.QtSerialPort import QSerialPort
 from PySide6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
     QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox, \
     QSlider
-from PySide6.QtGui import QPalette, QColor
 
 from pglive.sources.data_connector import DataConnector
 from pglive.sources.live_axis_range import LiveAxisRange
@@ -414,22 +415,49 @@ class PlotFFT(QWidget):
             print("Invalid time difference; cannot compute FFT.")
             return
 
+        # Choose a window function (e.g., Hamming, Hann, Blackman)
+        window = get_window('blackman', N)
+
+        # Apply the window to the data
+        windowed_data = accel_data * window
+
         # Perform FFT
-        freq = np.fft.fftfreq(N, d=dt)
-        fft_accel = np.fft.fft(accel_data)
+        freq = fftfreq(N, d=dt)
+        fft_accel = fft(windowed_data)
 
         # PSD and FFT magnitudes
-        psd = (np.abs(fft_accel) ** 2) / (N * dt)
-        psd_dB = 10 * np.log10(psd[:N // 2])
+
+        # Sampling frequency
+        fs = 1 / dt  # Assuming dt is the time step between samples
+
+        # Compute Welch's PSD
+        frequencies, psd = welch(accel_data, fs=fs, window='hamming', nperseg=N // 2, noverlap=N // 4,
+                                 scaling='density')
+
+        # Convert PSD to dB for visualization (optional)
+        psd_dB = 10 * np.log10(psd) + 500
         magnitudes = np.abs(fft_accel)[:N // 2]
 
-        self.positive_freqs = freq[:N // 2]
-        self.positive_magnitudes_dB = psd_dB if self.plot_mode == "PSD" else magnitudes
+        if self.plot_mode == "PSD":
+            # Use Welch's PSD output
+            positive_freqs = frequencies
+            positive_magnitudes_dB = psd_dB
+        else:
+            # Use FFT output
+            positive_freqs = freq[:N // 2]
+            positive_magnitudes_dB = magnitudes
 
-        # Find peaks in the selected mode
-        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
-        self.natural_frequencies = self.positive_freqs[peaks]
-        peak_magnitudes = self.positive_magnitudes_dB[peaks]
+        # Mask frequencies below 1 Hz
+        mask = positive_freqs >= 1.0
+        filtered_freqs = positive_freqs[mask]
+        filtered_magnitudes = positive_magnitudes_dB[mask]
+
+        # Find peaks in the filtered data
+        peaks, _ = find_peaks(filtered_magnitudes, height=tolerance)
+        self.natural_frequencies = filtered_freqs[peaks]
+        peak_magnitudes = filtered_magnitudes[peaks]
+
+        print(self.natural_frequencies)
 
         # Plot
         self.plot_widget_fft.clear()
@@ -438,11 +466,12 @@ class PlotFFT(QWidget):
         symbolPen = pg.mkPen('#D8973C')
         symbolBrush = pg.mkBrush('#D8973C')
 
-        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen=fftPen)
+        self.plot_widget_fft.plot(filtered_freqs, filtered_magnitudes, pen=fftPen)
 
         # Add peak markers
         self.plot_widget_fft.plot(
-            self.natural_frequencies, peak_magnitudes, pen=None, symbol='o', symbolPen=symbolPen, symbolBrush=symbolBrush
+            self.natural_frequencies, peak_magnitudes, pen=None, symbol='o', symbolPen=symbolPen,
+            symbolBrush=symbolBrush
         )
         self.plot_widget_fft.setLabel('left', 'PSD (dB/Hz)' if self.plot_mode == "PSD" else 'Magnitude')
         self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
@@ -649,13 +678,13 @@ class SerialPlotterWindow(QMainWindow):
 
         # Finalize the scroll area
         scroll_area.setWidget(content_widget)
-        self.plot_layout.addWidget(scroll_area, 0, 3, 3, 1)
+        self.plot_layout.addWidget(scroll_area, 0, 3, 4, 1)
 
     def init_sensor_data(self):
         # Initialize data connectors for multiple sensors
-        self.sensor_count = 3  # Adjust based on the number of sensors you expect
-        for sensor_id in range(1, self.sensor_count + 1):
-            self.add_sensor_plot(sensor_id,sensor_id-1)
+        self.sensor_count = 4  # Adjust based on the number of sensors you expect
+        for sensor_id in range(1, self.sensor_count+1):
+            self.add_sensor_plot(sensor_id-1,sensor_id-1)
 
     def add_sensor_plot(self, sensor_id, row, max_points=600,update_rate=30):
         container_widget = QWidget()
@@ -696,7 +725,7 @@ class SerialPlotterWindow(QMainWindow):
 
         # Re-add all sensor plots with the new max_points and update_rate values
         for sensor_id in range(1, self.sensor_count + 1):
-            self.add_sensor_plot(sensor_id, sensor_id - 1, max_points=selected_max_points, update_rate=selected_update_rate)
+            self.add_sensor_plot(sensor_id - 1, sensor_id - 1, max_points=selected_max_points, update_rate=selected_update_rate)
 
     def remove_sensor_plot(self, sensor_id):
         # Helper method to remove a plot and its connector
