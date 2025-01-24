@@ -14,7 +14,7 @@ from PySide6.QtCore import QIODevice, Qt, QTimer, QThread, Signal
 from PySide6.QtSerialPort import QSerialPort
 from PySide6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
     QFileDialog, QComboBox, QHBoxLayout, QTabWidget, QLabel, QScrollArea, QCheckBox, \
-    QSlider
+    QSlider, QTextEdit
 
 from pglive.sources.data_connector import DataConnector
 from pglive.sources.live_axis_range import LiveAxisRange
@@ -277,19 +277,45 @@ class PlotFFT(QWidget):
 
         # Add widgets to the layout
         layout.addWidget(container_widget)
-        layout.addWidget(QLabel("Accelerometer ID:"))  # Add label for accelerometer selection
-        layout.addWidget(self.accel_id_selection)  # Add the accelerometer ID selection
-        layout.addWidget(self.axis_selection)  # Add the axis selection combo box to the layout
-        layout.addWidget(self.start_time_label)
-        layout.addWidget(self.start_time_slider)
-        layout.addWidget(self.end_time_label)
-        layout.addWidget(self.end_time_slider)
-        layout.addWidget(self.tolerance_label)
-        layout.addWidget(self.tolerance_slider)
-        layout.addWidget(self.export_button)  # Add the export button to the layout
-        layout.addWidget(self.open_button)  # Add the open CSV button to the layout
-        layout.addWidget(self.open_recent)  # Add the open CSV button to the layout
-        layout.addWidget(self.toggle_button)  # Add the toggle button to the layout
+
+        # Create a QHBoxLayout for the accelerometer selection row
+        accel_row = QHBoxLayout()
+
+        # Add the widgets to the row
+        accel_row.addWidget(QLabel("Accelerometer ID and Axis:"),0)  # Label for accelerometer selection
+        accel_row.addWidget(self.accel_id_selection,1)  # Accelerometer ID selection combo box
+        accel_row.addWidget(self.axis_selection,1)  # Axis selection combo box
+
+        # Add the horizontal layout to the main layout
+        layout.addLayout(accel_row)
+
+        # Create a QGridLayout for the sliders and their labels
+        slider_grid = QGridLayout()
+
+        # Add labels and sliders next to each other in rows
+        slider_grid.addWidget(self.start_time_label, 0, 0)  # Row 0, Column 0
+        slider_grid.addWidget(self.start_time_slider, 0, 1)  # Row 0, Column 1
+
+        slider_grid.addWidget(self.end_time_label, 1, 0)  # Row 1, Column 0
+        slider_grid.addWidget(self.end_time_slider, 1, 1)  # Row 1, Column 1
+
+        slider_grid.addWidget(self.tolerance_label, 2, 0)  # Row 2, Column 0
+        slider_grid.addWidget(self.tolerance_slider, 2, 1)  # Row 2, Column 1
+
+        # Add the slider grid to the main layout
+        layout.addLayout(slider_grid)
+
+        # Assuming `layout` is your main layout, create a QGridLayout for the buttons
+        button_grid = QGridLayout()
+
+        # Add buttons to the grid in a 2x2 pattern
+        button_grid.addWidget(self.export_button, 0, 0)  # Row 0, Column 0
+        button_grid.addWidget(self.open_button, 0, 1)  # Row 0, Column 1
+        button_grid.addWidget(self.open_recent, 1, 0)  # Row 1, Column 0
+        button_grid.addWidget(self.toggle_button, 1, 1)  # Row 1, Column 1
+
+        # Add the button grid to the main layout
+        layout.addLayout(button_grid)
 
         # Set the layout to the main widget
         self.setLayout(layout)
@@ -321,20 +347,31 @@ class PlotFFT(QWidget):
             print("Invalid time difference; cannot compute FFT.")
             return
 
+        # Apply Hamming window to the time-domain data
+        hamming_window = np.blackman(N)
+        accel_data_windowed = accel_data * hamming_window
+
         # Zero-padding: Calculate the padded length based on the padding factor
         padded_length = int(N * self.padding_factor)
-        accel_data_padded = np.pad(accel_data, (0, padded_length - N), mode='constant')
+        accel_data_padded = np.pad(accel_data_windowed, (0, padded_length - N), mode='constant')
 
         # Compute FFT with zero-padded data
         freq = np.fft.fftfreq(padded_length, d=dt)
         fft_accel = np.fft.fft(accel_data_padded)
         psd = (np.abs(fft_accel) ** 2) / (padded_length * dt)
-        psd_dB = 10 * np.log10(psd[:padded_length // 2])
-        magnitudes = np.abs(fft_accel)[:padded_length // 2]
+        psd_dB = 1000 * np.log10(psd[:padded_length // 2])
+        magnitudes = 100 * np.abs(fft_accel)[:padded_length // 2]
 
         self.positive_freqs = freq[:padded_length // 2]
         self.positive_magnitudes_dB = psd_dB if self.plot_mode == "PSD" else magnitudes
 
+        # Filter out frequencies below 0.5 Hz
+        min_frequency = 2
+        valid_indices = self.positive_freqs >= min_frequency
+        self.positive_freqs = self.positive_freqs[valid_indices]
+        self.positive_magnitudes_dB = self.positive_magnitudes_dB[valid_indices]
+
+        # Update peaks after filtering
         peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
         self.natural_frequencies = self.positive_freqs[peaks]
         peak_magnitudes = self.positive_magnitudes_dB[peaks]
@@ -616,6 +653,114 @@ class PlotFFT(QWidget):
             else:
                 print("No data available after filtering.")
 
+class CSVCombinerWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        # Layout
+        layout = QVBoxLayout(self)
+
+        # Widgets
+        self.label = QLabel("Select CSV files to combine their 'Natural Frequency (Hz)' values")
+        self.button_select_files = QPushButton("Select Files")
+        self.button_select_folder = QPushButton("Select Folder")
+        self.text_output = QTextEdit()
+        self.text_output.setReadOnly(True)
+        self.button_save = QPushButton("Save Combined Values")
+        self.button_save.setEnabled(False)
+
+        # Add widgets to layout
+        layout.addWidget(self.label)
+        layout.addWidget(self.button_select_files)
+        layout.addWidget(self.button_select_folder)
+        layout.addWidget(self.text_output)
+        layout.addWidget(self.button_save)
+
+        # Signals
+        self.button_select_files.clicked.connect(self.select_files)
+        self.button_select_folder.clicked.connect(self.select_folder)
+        self.button_save.clicked.connect(self.save_combined_values)
+
+        # Data
+        self.combined_values = []
+
+    def select_files(self):
+        files, _ = QFileDialog.getOpenFileNames(
+            self, "Select CSV Files", "", "CSV Files (*.csv)"
+        )
+
+        if not files:
+            return
+
+        self.process_files(files)
+
+    def select_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Folder"
+        )
+
+        if not folder:
+            return
+
+        files = [
+            os.path.join(folder, f) for f in os.listdir(folder)
+            if f.lower().endswith(".csv") and "natural_frequencies" in f.lower()
+        ]
+
+        if not files:
+            QMessageBox.warning(self, "No Files Found",
+                                "No files with 'natural_frequencies' in their name were found in the selected folder.")
+            return
+
+        self.process_files(files)
+
+    def process_files(self, files):
+        self.combined_values = []
+        try:
+            # Store frequencies rounded to 3 decimal places
+            freq_dict = {}
+
+            for file in files:
+                df = pd.read_csv(file)
+                if 'Natural Frequency (Hz)' in df.columns:
+                    for freq in df['Natural Frequency (Hz)'].dropna():
+                        rounded_freq = round(freq, 3)
+                        if rounded_freq in freq_dict:
+                            freq_dict[rounded_freq].append(freq)
+                        else:
+                            freq_dict[rounded_freq] = [freq]
+                else:
+                    QMessageBox.warning(self, "Missing Column",
+                                        f"File '{file}' does not contain 'Natural Frequency (Hz)' column.")
+
+            # Now average the values with the same rounded frequency
+            self.combined_values = [
+                round(sum(values) / len(values), 3) for values in freq_dict.values()
+            ]
+
+            # Sort and display the combined values
+            self.combined_values = sorted(self.combined_values)
+
+            self.text_output.setText("\n".join(map(str, self.combined_values)))
+            self.button_save.setEnabled(True if self.combined_values else False)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred: {str(e)}")
+
+    def save_combined_values(self):
+        file, _ = QFileDialog.getSaveFileName(self, "Save Combined Values", "combined_values.csv",
+                                              "CSV Files (*.csv)")
+
+        if not file:
+            return
+
+        try:
+            df = pd.DataFrame({'Natural Frequency (Hz)': self.combined_values})
+            df.to_csv(file, index=False)
+            QMessageBox.information(self, "Success", "Combined values saved successfully!")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"An error occurred while saving: {str(e)}")
+
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -644,7 +789,11 @@ class SerialPlotterWindow(QMainWindow):
         self.plot_fft = PlotFFT()  # Assuming PlotFFT is defined elsewhere
         self.tab_widget.addTab(self.plot_fft, "Sensor Data Plot")
 
-        # Add SensorPlot tab
+        # Add CSV combiner tab
+        self.csvcombiner = CSVCombinerWidget()
+        self.tab_widget.addTab(self.csvcombiner, "CSV Combiner")
+
+        # Add Settings tab
         self.settings = Settings(self.plot_fft)  # Assuming PlotFFT is defined elsewhere
         self.tab_widget.addTab(self.settings, "Settings")
 
@@ -750,13 +899,13 @@ class SerialPlotterWindow(QMainWindow):
 
         # Finalize the scroll area
         scroll_area.setWidget(content_widget)
-        self.plot_layout.addWidget(scroll_area, 0, 3, 3, 1)
+        self.plot_layout.addWidget(scroll_area, 0, 3, 4, 1)
 
     def init_sensor_data(self):
         # Initialize data connectors for multiple sensors
-        self.sensor_count = 3  # Adjust based on the number of sensors you expect
+        self.sensor_count = 4  # Adjust based on the number of sensors you expect
         for sensor_id in range(1, self.sensor_count + 1):
-            self.add_sensor_plot(sensor_id,sensor_id-1)
+            self.add_sensor_plot(sensor_id-1,sensor_id-1)
 
     def add_sensor_plot(self, sensor_id, row, max_points=600,update_rate=30):
         container_widget = QWidget()
