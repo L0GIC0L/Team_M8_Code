@@ -1,12 +1,7 @@
-"""
-This edition makes use of the PGLive library, which extends the functionality of pyqtgraph to include liveplots. It
-replaces the rolling buffer system used previously and greatly streamlines the code.
-"""
 import csv
 import os
-import signal
+import re
 import sys
-import time
 from datetime import datetime  # Add this import statement
 
 import numpy as np
@@ -18,16 +13,13 @@ from scipy.signal import find_peaks
 from PySide6.QtCore import QIODevice, Qt, QTimer, QThread, Signal
 from PySide6.QtSerialPort import QSerialPort
 from PySide6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
-    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox, \
+    QFileDialog, QComboBox, QHBoxLayout, QTabWidget, QLabel, QScrollArea, QCheckBox, \
     QSlider
-from PySide6.QtGui import QPalette, QColor
 
 from pglive.sources.data_connector import DataConnector
 from pglive.sources.live_axis_range import LiveAxisRange
 from pglive.sources.live_plot import LiveLinePlot
 from pglive.sources.live_plot_widget import LivePlotWidget
-
-
 
 class SerialReader(QThread):
     # Define a generic data_received signal with sensor_id
@@ -131,6 +123,7 @@ class DataRecorder:
             # Generate a default filename based on the current timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = os.path.join(directory, f"samples_{timestamp}.csv")
+            self.last_saved_file = filename
 
             try:
                 with open(filename, "w", newline="") as file:
@@ -143,9 +136,78 @@ class DataRecorder:
         else:
             QMessageBox.warning(None, "Export Error", "No data to export.")
 
+class Settings(QWidget):
+    def __init__(self, plot_fft_instance):
+        super().__init__()
+        self.plot_fft = plot_fft_instance  # Reference to PlotFFT instance
+        self.init_ui()
+
+    def init_ui(self):
+        # Main layout for the settings widget
+        main_layout = QHBoxLayout()
+
+        # Left side for padding factor controls
+        left_layout = QVBoxLayout()
+
+        # Label for the Padding Slider
+        self.padding_label = QLabel("PF=1")
+        self.padding_label.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(self.padding_label)
+
+        # Slider for Padding Factor (1 to 10) - Vertical Slider
+        self.padding_slider = QSlider(Qt.Orientation.Vertical)
+        self.padding_slider.setMinimum(1)
+        self.padding_slider.setMaximum(10)
+        self.padding_slider.setValue(1)  # Default value
+        self.padding_slider.valueChanged.connect(self.update_padding)
+        left_layout.addWidget(self.padding_slider)
+
+        # Right side for stylesheet selection
+        right_layout = QVBoxLayout()
+
+        # Label for the Stylesheet Dropdown
+        label = QLabel("Select Stylesheet:")
+        label.setAlignment(Qt.AlignBottom)
+        right_layout.addWidget(label)
+
+        # Dropdown (ComboBox) for selecting stylesheet
+        self.stylesheet_dropdown = QComboBox()
+        self.stylesheet_dropdown.addItems(["Default", "Dark Mode", "Light Mode"])
+        self.stylesheet_dropdown.currentIndexChanged.connect(self.change_stylesheet)
+        right_layout.addWidget(self.stylesheet_dropdown)
+
+        # Add both left and right layouts to the main layout
+        main_layout.addLayout(left_layout)
+        main_layout.addLayout(right_layout)
+
+        # Set the layout for the widget
+        self.setLayout(main_layout)
+
+    def update_padding(self):
+        padding_factor = self.padding_slider.value()
+        self.padding_label.setText(f"PF={padding_factor}")
+        self.plot_fft.update_padding_factor(padding_factor)
+
+    def change_stylesheet(self):
+        selected_style = self.stylesheet_dropdown.currentText()
+        if selected_style == "Default":
+            load_stylesheet(QApplication.instance(), "style_blank")  # Directly calling the function
+        elif selected_style == "Dark Mode":
+            load_stylesheet(QApplication.instance(), "style_dark")  # Directly calling the function
+        elif selected_style == "Light Mode":
+            load_stylesheet(QApplication.instance(), "style_light")
+
 class PlotFFT(QWidget):
     def __init__(self):
         super().__init__()
+
+        # Default padding factor
+        self.padding_factor = 5
+
+        # Initialize the QTimer for debouncing
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.update_plot)
 
         # Set up the main widget layout
         layout = QVBoxLayout()
@@ -209,6 +271,10 @@ class PlotFFT(QWidget):
         self.open_button = QPushButton("Open CSV")
         self.open_button.clicked.connect(self.open_csv)
 
+        # Create the open CSV button
+        self.open_recent = QPushButton("Open Latest Sample")
+        self.open_recent.clicked.connect(self.open_last_sample)
+
         # Add widgets to the layout
         layout.addWidget(container_widget)
         layout.addWidget(QLabel("Accelerometer ID:"))  # Add label for accelerometer selection
@@ -222,6 +288,7 @@ class PlotFFT(QWidget):
         layout.addWidget(self.tolerance_slider)
         layout.addWidget(self.export_button)  # Add the export button to the layout
         layout.addWidget(self.open_button)  # Add the open CSV button to the layout
+        layout.addWidget(self.open_recent)  # Add the open CSV button to the layout
         layout.addWidget(self.toggle_button)  # Add the toggle button to the layout
 
         # Set the layout to the main widget
@@ -235,6 +302,91 @@ class PlotFFT(QWidget):
         self.positive_magnitudes_dB = np.array([])  # Placeholder for magnitudes
 
         self.plot_mode = "FFT"  # Default mode
+
+    def plot_frequency_domain(self, data, start_time, end_time, tolerance, padding_factor):
+        # Extract data and compute FFT
+        selected_axis = self.axis_selection.currentText()
+        selected_accel = self.accel_id_selection.currentText()
+        accel_data = data[selected_axis].to_numpy()
+        time = data['Time [microseconds]'].to_numpy()
+        self.padding_factor = padding_factor
+
+        N = len(accel_data)
+        if N < 2:
+            print("Not enough data points for FFT.")
+            return
+
+        dt = np.mean(np.diff(time)) * 1e-6  # Time difference in seconds
+        if dt <= 0:
+            print("Invalid time difference; cannot compute FFT.")
+            return
+
+        # Zero-padding: Calculate the padded length based on the padding factor
+        padded_length = int(N * self.padding_factor)
+        accel_data_padded = np.pad(accel_data, (0, padded_length - N), mode='constant')
+
+        # Compute FFT with zero-padded data
+        freq = np.fft.fftfreq(padded_length, d=dt)
+        fft_accel = np.fft.fft(accel_data_padded)
+        psd = (np.abs(fft_accel) ** 2) / (padded_length * dt)
+        psd_dB = 10 * np.log10(psd[:padded_length // 2])
+        magnitudes = np.abs(fft_accel)[:padded_length // 2]
+
+        self.positive_freqs = freq[:padded_length // 2]
+        self.positive_magnitudes_dB = psd_dB if self.plot_mode == "PSD" else magnitudes
+
+        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
+        self.natural_frequencies = self.positive_freqs[peaks]
+        peak_magnitudes = self.positive_magnitudes_dB[peaks]
+
+        # Plot data
+        if not hasattr(self, 'fft_plot_data_item'):
+            fft_pen = pg.mkPen(color='#F7F5FB', width=1)
+            self.fft_plot_data_item = self.plot_widget_fft.plot(pen=fft_pen)
+
+        self.fft_plot_data_item.setData(self.positive_freqs, self.positive_magnitudes_dB)
+
+        # Plot peaks
+        if not hasattr(self, 'fft_peak_item'):
+            symbol_pen = pg.mkPen('#D8973C')
+            symbol_brush = pg.mkBrush('#D8973C')
+            self.fft_peak_item = self.plot_widget_fft.plot(pen=None, symbol='o', symbolPen=symbol_pen,
+                                                           symbolBrush=symbol_brush)
+
+        self.fft_peak_item.setData(self.natural_frequencies, peak_magnitudes)
+
+        # Update plot labels and title
+        self.plot_widget_fft.setLabel('left', 'PSD (dB/Hz)' if self.plot_mode == "PSD" else 'Magnitude')
+        self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
+        mode_title = "PSD" if self.plot_mode == "PSD" else "FFT"
+        self.plot_widget_fft.setTitle(
+            f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)")
+
+    def update_padding_factor(self, padding_factor):
+        """ Update the padding factor when changed in settings """
+        self.padding_factor = padding_factor
+        print(f"Padding Factor updated to: {self.padding_factor}")
+        self.update_plot()
+
+    def open_last_sample(self):
+        directory, pattern = "Cached_Samples/", r"samples_\d{8}_\d{6}\.csv"
+        files = [f for f in os.listdir(directory) if re.match(pattern, f)]
+        if not files:
+            print("No matching files found.")
+            return
+
+        newest_file = max([os.path.join(directory, f) for f in files], key=os.path.getmtime)
+        print(f"Opening newest file: {newest_file}")
+        self.data = self.load_data(newest_file)
+        self.data_filtered = self.filter_data(self.data)
+
+        if not self.data_filtered.empty:
+            self.setup_sliders()
+            self.plot_time_domain(self.data_filtered)
+            self.plot_frequency_domain(self.data_filtered, self.start_time_slider.value(),
+                                       self.end_time_slider.value(), self.tolerance_slider.value(), self.padding_factor)
+        else:
+            print("No data available after filtering.")
 
     def toggle_plot(self):
         # Toggle between PSD and FFT plotting.
@@ -271,21 +423,23 @@ class PlotFFT(QWidget):
             return pd.DataFrame()
 
     def plot_time_domain(self, data):
-        time = data['Time [microseconds]'].to_numpy()
-        selected_axis = self.axis_selection.currentText()  # Get the selected axis
-        selected_accel = self.accel_id_selection.currentText()  # Get selected accelerometer ID
-        accel_data = data[selected_axis].to_numpy()  # Select data based on the chosen axis
+        # Extract time and acceleration data
+        time = data['Time [microseconds]'].to_numpy() / 1e6  # Convert to seconds
+        selected_axis = self.axis_selection.currentText()  # Selected axis (e.g., X, Y, Z)
+        selected_accel = self.accel_id_selection.currentText()  # Selected accelerometer ID
+        accel_data = data[selected_axis].to_numpy()  # Get selected axis data
 
-        self.plot_widget_time.clear()
+        # Create the PlotDataItem if it doesn't already exist
+        if not hasattr(self, 'time_plot_data_item'):
+            pen = pg.mkPen(color='#2541B2', width=1)
+            self.time_plot_data_item = self.plot_widget_time.plot(pen=pen, name=selected_axis)
 
-        pen1 = pg.mkPen(color='#2541B2')
+        # Update the PlotDataItem's data
+        self.time_plot_data_item.setData(time, accel_data)
 
-        # Plot the selected acceleration axis
-        self.plot_widget_time.plot(time, accel_data, pen=pen1, name=selected_axis)
-
-        self.plot_widget_time.addLegend()
+        # Update plot labels and title
         self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
-        self.plot_widget_time.setLabel('bottom', 'Time (microseconds)')
+        self.plot_widget_time.setLabel('bottom', 'Time (s)')
         self.plot_widget_time.setTitle(f"Accelerometer {selected_accel}: {selected_axis} (Time Domain)")
 
     def filter_data(self, data):
@@ -307,10 +461,10 @@ class PlotFFT(QWidget):
 
         # Calculate percentiles for each column
         percentiles = {
-            'time': newdata['Time [microseconds]'].quantile([0.001, 0.999]),
-            'x_accel': newdata['X Acceleration'].quantile([0.001, 0.999]),
-            'y_accel': newdata['Y Acceleration'].quantile([0.001, 0.999]),
-            'z_accel': newdata['Z Acceleration'].quantile([0.001, 0.999]),
+            'time': newdata['Time [microseconds]'].quantile([0.005, 0.995]),
+            'x_accel': newdata['X Acceleration'].quantile([0.005, 0.995]),
+            'y_accel': newdata['Y Acceleration'].quantile([0.005, 0.995]),
+            'z_accel': newdata['Z Acceleration'].quantile([0.005, 0.995]),
         }
 
         # Apply filtering conditions based on the calculated percentiles
@@ -326,7 +480,6 @@ class PlotFFT(QWidget):
             ]
 
         return data_filtered
-
 
     def setup_sliders(self):
         # Setup the sliders based on the filtered data.
@@ -394,63 +547,7 @@ class PlotFFT(QWidget):
         self.plot_time_domain(time_filtered_data)
 
         default_tolerance = self.tolerance_slider.value()
-        self.plot_frequency_domain(time_filtered_data, start_time, end_time, default_tolerance)
-
-    def plot_frequency_domain(self, data, start_time, end_time, tolerance):
-        selected_axis = self.axis_selection.currentText()
-        selected_accel = self.accel_id_selection.currentText()
-
-        # Extract relevant data
-        accel_data = data[selected_axis].to_numpy()
-        time = data['Time [microseconds]'].to_numpy()
-
-        N = len(accel_data)
-        if N < 2:
-            print("Not enough data points for FFT.")
-            return
-
-        dt = np.mean(np.diff(time)) * 1e-6  # Convert µs to seconds
-        if dt <= 0:
-            print("Invalid time difference; cannot compute FFT.")
-            return
-
-        # Perform FFT
-        freq = np.fft.fftfreq(N, d=dt)
-        fft_accel = np.fft.fft(accel_data)
-
-        # PSD and FFT magnitudes
-        psd = (np.abs(fft_accel) ** 2) / (N * dt)
-        psd_dB = 10 * np.log10(psd[:N // 2])
-        magnitudes = np.abs(fft_accel)[:N // 2]
-
-        self.positive_freqs = freq[:N // 2]
-        self.positive_magnitudes_dB = psd_dB if self.plot_mode == "PSD" else magnitudes
-
-        # Find peaks in the selected mode
-        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
-        self.natural_frequencies = self.positive_freqs[peaks]
-        peak_magnitudes = self.positive_magnitudes_dB[peaks]
-
-        # Plot
-        self.plot_widget_fft.clear()
-
-        fftPen = pg.mkPen(color='#F7F5FB')
-        symbolPen = pg.mkPen('#D8973C')
-        symbolBrush = pg.mkBrush('#D8973C')
-
-        self.plot_widget_fft.plot(self.positive_freqs, self.positive_magnitudes_dB, pen=fftPen)
-
-        # Add peak markers
-        self.plot_widget_fft.plot(
-            self.natural_frequencies, peak_magnitudes, pen=None, symbol='o', symbolPen=symbolPen, symbolBrush=symbolBrush
-        )
-        self.plot_widget_fft.setLabel('left', 'PSD (dB/Hz)' if self.plot_mode == "PSD" else 'Magnitude')
-        self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
-
-        # Set title based on the selected mode
-        mode_title = "PSD" if self.plot_mode == "PSD" else "FFT"
-        self.plot_widget_fft.setTitle(
-            f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)")
+        self.plot_frequency_domain(time_filtered_data, start_time, end_time, default_tolerance, self.padding_factor)
 
     def export_data(self):
         # Export trimmed data, frequency and magnitude data, and natural frequencies to CSV files if available.
@@ -546,6 +643,10 @@ class SerialPlotterWindow(QMainWindow):
         # Add SensorPlot tab
         self.plot_fft = PlotFFT()  # Assuming PlotFFT is defined elsewhere
         self.tab_widget.addTab(self.plot_fft, "Sensor Data Plot")
+
+        # Add SensorPlot tab
+        self.settings = Settings(self.plot_fft)  # Assuming PlotFFT is defined elsewhere
+        self.tab_widget.addTab(self.settings, "Settings")
 
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
@@ -759,13 +860,17 @@ class SerialPlotterWindow(QMainWindow):
     def export_data(self):
         self.data_recorder.export_data()
 
-def load_stylesheet(app):
-    # Get the absolute path of the stylesheet file
-    style_file = os.path.join(os.path.dirname(__file__), "Preferences/style_dark.qss")
+def load_stylesheet(app, style_name="style_dark"):
+    # Map stylesheet names to file paths
+    stylesheet_path = os.path.join(os.path.dirname(__file__), f"Preferences/{style_name}.qss")
 
-    # Read the content of the stylesheet
-    with open(style_file, "r") as f:
-        app.setStyleSheet(f.read())
+    # Check if the file exists
+    if os.path.exists(stylesheet_path):
+        with open(stylesheet_path, "r") as f:
+            app.setStyleSheet(f.read())
+    else:
+        print(f"Error: Stylesheet file '{stylesheet_path}' not found.")
+        app.setStyleSheet("")  # Reset to default if file is missing
 
 def main():
     app = QApplication(sys.argv)
