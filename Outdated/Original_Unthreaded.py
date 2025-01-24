@@ -2,16 +2,15 @@ import csv
 import os
 import signal
 import sys
-import time
 
 import numpy as np
 import pyqtgraph as pg
 from PyQt6.QtCore import QIODevice, Qt
 from PyQt6.QtSerialPort import QSerialPort
 from PyQt6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
-    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea, QCheckBox
+    QFileDialog, QComboBox, QTextEdit, QTabWidget, QGraphicsDropShadowEffect, QLabel, QScrollArea
 from PyQt6.QtGui import QPalette, QColor
-from PyQt6.QtCore import QTimer
+
 
 class CircularBuffer:
     def __init__(self, capacity):
@@ -35,6 +34,8 @@ class CircularBuffer:
 class SerialPlotterWindow(QMainWindow):
     def __init__(self):
 
+
+        
         # ---------------------------------------- Initialization ---------------------------------------- #
         super().__init__()
 
@@ -54,24 +55,21 @@ class SerialPlotterWindow(QMainWindow):
         self.buffer_sizes = [1000, 3000, 5000, 7000, 10000,17500,30000]
         self.buffer_capacity = self.buffer_sizes[0]
 
-        self.serial_ports = ["/dev/ttyACM0","/dev/ttyACM1","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
-        self.current_port_index = 0  # Default to the second port in the list
+        self.serial_ports = ["/dev/ttyACM0","/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
+        self.current_port_index = 1  # Default to the second port in the list
 
         self.serial_port = QSerialPort()
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
-        self.serial_port.setBaudRate(1000000)
+        self.serial_port.setBaudRate(460800)
         self.serial_port.readyRead.connect(self.receive_serial_data)
 
-        # Create a QTimer for controlled plot updates
-        self.plot_timer = QTimer(self)
-        self.plot_timer.setInterval(33)  # Refresh the plot every 10 milliseconds (10 Hz)
-        self.plot_timer.timeout.connect(self.update_plots)
-        self.plot_timer.start()
+        
 
         # ------------------------------------------ Raw Data ------------------------------------------ #
         self.serial_text_edit = QTextEdit()
         self.serial_text_edit.setReadOnly(True)
         self.plot_layout.addWidget(self.serial_text_edit, 2, 0, 1, 4)  # Add it to the right side of the layout
+
 
 
         # ----------------------------------------- Options Menu ----------------------------------------- #
@@ -89,62 +87,41 @@ class SerialPlotterWindow(QMainWindow):
         content_layout.addWidget(options_label, 0, 0, 1, 2)
         options_label.setObjectName("heading_label")  # Set object name
         options_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-        options_label.setMinimumHeight(20)
-        options_label.setMaximumHeight(30)
 
         # Add the buffer size combo and export button to the layout
         buffer_size_label = QLabel("Buffer Size:")
-        content_layout.addWidget(buffer_size_label, 3, 0, 1, 1)
+        content_layout.addWidget(buffer_size_label, 1, 0, 1, 1)
         buffer_size_label.setObjectName("combo_label")  # Set object name
         buffer_size_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         buffer_size_combo = QComboBox()
         buffer_size_combo.addItems([str(size) for size in self.buffer_sizes])
         buffer_size_combo.setCurrentIndex(0)
         buffer_size_combo.currentIndexChanged.connect(self.change_buffer_size)
-        content_layout.addWidget(buffer_size_combo, 3, 1, 1, 1)
+        content_layout.addWidget(buffer_size_combo, 1, 1, 1, 1)
 
         # Add the buffer size combo and export button to the layout
         serial_port_label = QLabel("COM Port:")
-        content_layout.addWidget(serial_port_label, 4, 0, 1, 1)
+        content_layout.addWidget(serial_port_label, 2, 0, 1, 1)
         serial_port_label.setObjectName("combo_label")  # Set object name
         serial_port_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.serial_port_combo = QComboBox()
         self.serial_port_combo.addItems(self.serial_ports)
         self.serial_port_combo.setCurrentIndex(self.current_port_index)
         self.serial_port_combo.currentIndexChanged.connect(self.change_serial_port)
-        content_layout.addWidget(self.serial_port_combo, 4, 1, 1, 1)
-
-        self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000,100000]
-        self.current_communication_speed = 0
-
-        # Add the buffer size combo and export button to the layout
-        communication_speed_label = QLabel("Speed:")
-        content_layout.addWidget(communication_speed_label, 2, 0, 1, 1)
-        communication_speed_label.setObjectName("combo_label")  # Set object name
-        communication_speed_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.communication_speed_combo = QComboBox()
-        self.communication_speed_combo.addItems([str(size) for size in self.communication_speeds])
-        self.communication_speed_combo.setCurrentIndex(self.current_communication_speed)
-        content_layout.addWidget(self.communication_speed_combo, 2, 1, 1, 1)
+        content_layout.addWidget(self.serial_port_combo, 2, 1, 1, 1)
 
         self.reconnect_button = QPushButton("Reconnect")
-        self.reconnect_button.clicked.connect(self.change_serial_port)
-        content_layout.addWidget(self.reconnect_button, 5, 0, 1, 2)
+        self.reconnect_button.clicked.connect(self.reconnect_serial_port)
+        content_layout.addWidget(self.reconnect_button, 3, 0, 1, 2)
 
         export_button = QPushButton("Export Data")
         export_button.clicked.connect(self.export_data)
-        content_layout.addWidget(export_button, 6, 0, 1, 2)
-
-        # ------------------------------------- New: Checkbox to Stop/Start Plotting ------------------------------------- #
-        self.plot_enabled_checkbox = QCheckBox("Enable Plotting")
-        self.plot_enabled_checkbox.setChecked(True)  # Start with plotting enabled
-        self.plot_enabled_checkbox.stateChanged.connect(self.toggle_plotting)
-        content_layout.addWidget(self.plot_enabled_checkbox, 1, 0, 1, 2)
-
-        self.plot_enabled_checkbox.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        content_layout.addWidget(export_button, 4, 0, 1, 2)
 
         scroll_area.setWidget(content_widget)
         self.plot_layout.addWidget(scroll_area, 0, 3, 2, 1)
+
+
 
         # ------------------------------------------ Tabs ------------------------------------------ #
         # Set up the plotting tab's layout and add to tab widget
@@ -178,20 +155,13 @@ class SerialPlotterWindow(QMainWindow):
         self.analysis_layout.addWidget(self.analysis_text)
         self.analysis_tab.setLayout(self.analysis_layout)
 
-        # Add the analysis tab to the tab widget
+        # Add the settings tab to the tab widget
         self.tab_widget.addTab(self.analysis_tab, "Analysis")
 
         # Set the tab widget as the central widget of the main window
         self.setCentralWidget(self.tab_widget)
 
-    def toggle_plotting(self):
-        """Toggle the plotting behavior based on the checkbox."""
-        if self.plot_enabled_checkbox.isChecked():
-            self.plot_timer.start()  # Resume plotting
-        else:
-            self.plot_timer.stop()  # Stop plotting
-
-    def add_graph(self, name, x_label, y_label, row, col, color, is_live=True):
+    def add_graph(self, name, x_label, y_label, row, col, color, is_live=False):
         # Create the graph widget
         graph_widget = pg.PlotWidget()
         graph_widget.setBackground("#2b2b2b")
@@ -201,7 +171,6 @@ class SerialPlotterWindow(QMainWindow):
         graph_widget.setMouseEnabled(x=True, y=False)
         graph_widget.setClipToView(True)
         graph_widget.setMinimumSize(200, 150)
-        graph_widget.setYRange(-20, 20)  # For accelerometer data, this range might be appropriate
 
         # Create a container widget for the graph with a layout
         graph_widget_container = QWidget()
@@ -221,58 +190,57 @@ class SerialPlotterWindow(QMainWindow):
         self.plot_data_items.append(plot_data_item)
 
     def receive_serial_data(self):
-        # Read multiple lines at once to reduce the number of plot updates
         while self.serial_port.canReadLine():
             try:
-                # Read a line, decode and strip it
                 data = self.serial_port.readLine().data().decode("utf-8").strip()
                 values = data.split()
 
-                # Store raw data in text display
+                # Update text edit with new serial data
                 self.serial_text_edit.append(data)
 
                 scaling_factor = 1
                 gravity = 9.8067
 
-                # Ensure the data line has the expected 5 values
                 if len(values) == 5:
                     accel_id = int(values[0])
-                    utime = int(values[1])
+                    utime = (int(values[1]))
                     x_accel = (float(values[2]) / scaling_factor) * gravity
                     y_accel = (float(values[3]) / scaling_factor) * gravity
                     z_accel = (float(values[4]) / scaling_factor) * gravity
 
-                    # Depending on accel_id, push data to appropriate buffer
                     if accel_id == 1:
-                        self.update_data_buffer(0, x_accel, 0, 0)  # Sensor 1 X
-                        self.update_data_buffer(1, 0, y_accel, 0, is_y_data=True)  # Sensor 1 Y
-                        self.update_data_buffer(2, 0, 0, z_accel, is_z_data=True)  # Sensor 1 Z
-                    elif accel_id == 2:
-                        self.update_data_buffer(3, x_accel, 0, 0)  # Sensor 2 X
-                        self.update_data_buffer(4, 0, y_accel, 0, is_y_data=True)  # Sensor 2 Y
-                        self.update_data_buffer(5, 0, 0, z_accel, is_z_data=True)  # Sensor 2 Z
+                        self.update_plot(0, x_accel, 0, 0)  # Plot X for Sensor 1
+                        self.update_plot(1, 0, y_accel, 0, is_y_data=True)  # Plot Y for Sensor 1 on bottom graph
+                        self.update_plot(2, 0, 0, z_accel, is_y_data=False,
+                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
 
-                    # Record the data for potential export
+                    elif accel_id == 2:
+                        self.update_plot(3, x_accel, 0, 0)  # Plot X for Sensor 2
+                        self.update_plot(4, 0, y_accel, 0, is_y_data=True)
+                        self.update_plot(5, 0, 0, z_accel, is_y_data=False,
+                                         is_z_data=True)  # Plot Z for Sensor 2 on bottom graph
+                    elif accel_id == 3:
+                        self.update_plot(2, x_accel, y_accel, z_accel)  # Plot X for Sensor 3
+                    elif accel_id == 4:
+                        self.update_plot(3, x_accel, y_accel, z_accel)  # Plot X for Sensor 4
+
                     self.data_records.append([utime, accel_id, x_accel, y_accel, z_accel])
 
             except (UnicodeDecodeError, IndexError, ValueError) as e:
                 print(f"Error processing data: {e}")
 
-    def update_data_buffer(self, index, x, y, z, is_y_data=False, is_z_data=False):
-        # Push data into appropriate buffer depending on which axis (X, Y, Z) it belongs to
+    def update_plot(self, index, x, y, z, is_y_data=False, is_z_data=False):
         if index < len(self.data_buffers):
             if is_y_data:
+                # Use Y acceleration data for specific plots
                 self.data_buffers[index].push(y)
             elif is_z_data:
+                # Use Z acceleration data for specific plots
                 self.data_buffers[index].push(z)
             else:
+                # Use X acceleration data for default plots
                 self.data_buffers[index].push(x)
-
-    def update_plots(self):
-        if self.plot_enabled_checkbox.isChecked():  # Check if plotting is enabled
-            for i, plot_item in enumerate(self.plot_data_items):
-                full_data = self.data_buffers[i].get_data()
-                plot_item.setData(full_data)
+            self.plot_data_items[index].setData(self.data_buffers[index].get_data())
 
     def export_data(self):
         if len(self.data_records) > 0:
@@ -300,18 +268,15 @@ class SerialPlotterWindow(QMainWindow):
 
     def change_serial_port(self, index):
         self.current_port_index = index
-        selected_speed = int(self.communication_speed_combo.currentText())
-        self.reconnect_serial_port(selected_speed)
+        self.reconnect_serial_port()
 
-    def reconnect_serial_port(self,selected_speed):
+    def reconnect_serial_port(self):
         if self.serial_port.isOpen():
             self.serial_port.close()
 
         self.serial_port.setPortName(self.serial_ports[self.current_port_index])
 
         if self.serial_port.open(QSerialPort.OpenModeFlag.ReadWrite):
-            print(selected_speed)
-            self.serial_port.write((str(selected_speed) + '\n').encode())
             print(f"Successfully connected to {self.serial_ports[self.current_port_index]}")
         else:
             print(f"Failed to connect to {self.serial_ports[self.current_port_index]}")
@@ -330,7 +295,7 @@ def keyboard_interrupt_handler(signal, frame):
 
 def load_stylesheet(app):
     # Get the absolute path of the stylesheet file
-    style_file = os.path.join(os.path.dirname(__file__), "Preferences/style_light.qss")
+    style_file = os.path.join(os.path.dirname(__file__), "style.qss")
 
     # Read the content of the stylesheet
     with open(style_file, "r") as f:
