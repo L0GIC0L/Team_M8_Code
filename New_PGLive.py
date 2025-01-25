@@ -14,7 +14,7 @@ from PySide6.QtCore import QIODevice, Qt, QTimer, QThread, Signal
 from PySide6.QtSerialPort import QSerialPort
 from PySide6.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QPushButton, QMessageBox, QVBoxLayout, \
     QFileDialog, QComboBox, QHBoxLayout, QTabWidget, QLabel, QScrollArea, QCheckBox, \
-    QSlider, QTextEdit
+    QSlider, QTextEdit, QListWidget
 
 from pglive.sources.data_connector import DataConnector
 from pglive.sources.live_axis_range import LiveAxisRange
@@ -155,7 +155,7 @@ class Settings(QWidget):
         left_layout.addWidget(self.padding_label)
 
         # Slider for Padding Factor (1 to 10) - Vertical Slider
-        self.padding_slider = QSlider(Qt.Orientation.Vertical)
+        self.padding_slider = QSlider(Qt.Orientation.Horizontal)
         self.padding_slider.setMinimum(1)
         self.padding_slider.setMaximum(10)
         self.padding_slider.setValue(1)  # Default value
@@ -210,13 +210,16 @@ class PlotFFT(QWidget):
         self.update_timer.timeout.connect(self.update_plot)
 
         # Set up the main widget layout
-        layout = QVBoxLayout()
+        main_layout = QHBoxLayout()  # Use QHBoxLayout for left-right arrangement
+
+        # Create the left layout (Plot and controls)
+        left_layout = QVBoxLayout()
 
         # Create the toggle button for PSD/FFT
         self.toggle_button = QPushButton("Show PSD")
         self.toggle_button.clicked.connect(self.toggle_plot)
 
-        # Create a container widget
+        # Create a container widget for the plots
         container_widget = QWidget()
         container_widget.setObjectName("graphy")  # Set object name
         container_layout = QVBoxLayout(container_widget)
@@ -231,6 +234,9 @@ class PlotFFT(QWidget):
         container_layout.addWidget(self.plot_widget_time)
         container_layout.addWidget(self.plot_widget_fft)
 
+        # Add the container widget (with the plots) to the left layout
+        left_layout.addWidget(container_widget)
+
         # Create sliders for setting the FFT time interval and tolerance
         self.start_time_slider = QSlider(Qt.Orientation.Horizontal)
         self.end_time_slider = QSlider(Qt.Orientation.Horizontal)
@@ -239,7 +245,7 @@ class PlotFFT(QWidget):
         # Set ranges for sliders based on data length and tolerance
         self.start_time_slider.setRange(0, 100)
         self.end_time_slider.setRange(0, 100)
-        self.tolerance_slider.setRange(10, 10000)  # Example range for tolerance
+        self.tolerance_slider.setRange(1, 10000)  # Example range for tolerance
 
         self.start_time_slider.setValue(0)
         self.end_time_slider.setValue(100)
@@ -261,7 +267,7 @@ class PlotFFT(QWidget):
         # Add labels for the sliders
         self.start_time_label = QLabel("Start Time: 0 µs")
         self.end_time_label = QLabel("End Time: 100 µs")
-        self.tolerance_label = QLabel("Tolerance: 10 dB")
+        self.tolerance_label = QLabel("Tolerance: 1000 dB")
 
         # Create the export button
         self.export_button = QPushButton("Export CSV")
@@ -275,9 +281,6 @@ class PlotFFT(QWidget):
         self.open_recent = QPushButton("Open Latest Sample")
         self.open_recent.clicked.connect(self.open_last_sample)
 
-        # Add widgets to the layout
-        layout.addWidget(container_widget)
-
         # Create a QHBoxLayout for the accelerometer selection row
         accel_row = QHBoxLayout()
 
@@ -286,8 +289,8 @@ class PlotFFT(QWidget):
         accel_row.addWidget(self.accel_id_selection,1)  # Accelerometer ID selection combo box
         accel_row.addWidget(self.axis_selection,1)  # Axis selection combo box
 
-        # Add the horizontal layout to the main layout
-        layout.addLayout(accel_row)
+        # Add the horizontal layout to the left layout
+        left_layout.addLayout(accel_row)
 
         # Create a QGridLayout for the sliders and their labels
         slider_grid = QGridLayout()
@@ -302,10 +305,10 @@ class PlotFFT(QWidget):
         slider_grid.addWidget(self.tolerance_label, 2, 0)  # Row 2, Column 0
         slider_grid.addWidget(self.tolerance_slider, 2, 1)  # Row 2, Column 1
 
-        # Add the slider grid to the main layout
-        layout.addLayout(slider_grid)
+        # Add the slider grid to the left layout
+        left_layout.addLayout(slider_grid)
 
-        # Assuming `layout` is your main layout, create a QGridLayout for the buttons
+        # Assuming `left_layout` is your left side layout, create a QGridLayout for the buttons
         button_grid = QGridLayout()
 
         # Add buttons to the grid in a 2x2 pattern
@@ -314,11 +317,25 @@ class PlotFFT(QWidget):
         button_grid.addWidget(self.open_recent, 1, 0)  # Row 1, Column 0
         button_grid.addWidget(self.toggle_button, 1, 1)  # Row 1, Column 1
 
-        # Add the button grid to the main layout
-        layout.addLayout(button_grid)
+        # Add the button grid to the left layout
+        left_layout.addLayout(button_grid)
+
+        # Create the right layout (QListWidget)
+        right_layout = QVBoxLayout()
+        self.freq_list_widget = QListWidget()
+        self.freq_list_widget.setSelectionMode(QListWidget.MultiSelection)  # Allow multiple selections
+        self.freq_list_widget.addItem("Awaiting Data...")
+        self.freq_list_widget.setMinimumWidth(125)  # Set your desired minimum width here (in pixels)
+
+        # Add the QListWidget to the right layout
+        right_layout.addWidget(self.freq_list_widget)
+
+        # Add the left and right layouts to the main layout
+        main_layout.addLayout(left_layout, 3)  # Left layout takes 3 parts of the space
+        main_layout.addLayout(right_layout, 1)  # Right layout takes 1 part of the space
 
         # Set the layout to the main widget
-        self.setLayout(layout)
+        self.setLayout(main_layout)
 
         # Load, filter, and plot the data
         self.data = pd.DataFrame()  # Empty DataFrame initially
@@ -329,11 +346,18 @@ class PlotFFT(QWidget):
 
         self.plot_mode = "FFT"  # Default mode
 
+        # Store natural frequency points
+        self.fft_peaks = []  # Holds the plot items for natural frequency markers
+        self.natural_frequencies = np.array([])
+
+        # Connect the selection change signal from the QListWidget
+        self.freq_list_widget.itemSelectionChanged.connect(self.update_selected_frequencies)
+
     def plot_frequency_domain(self, data, start_time, end_time, tolerance, padding_factor):
         # Extract data and compute FFT
         selected_axis = self.axis_selection.currentText()
         selected_accel = self.accel_id_selection.currentText()
-        accel_data = data[selected_axis].to_numpy()
+        accel_data = 9.8124*data[selected_axis].to_numpy()
         time = data['Time [microseconds]'].to_numpy()
         self.padding_factor = padding_factor
 
@@ -358,46 +382,76 @@ class PlotFFT(QWidget):
         # Compute FFT with zero-padded data
         freq = np.fft.fftfreq(padded_length, d=dt)
         fft_accel = np.fft.fft(accel_data_padded)
-        psd = (np.abs(fft_accel) ** 2) / (padded_length * dt)
-        psd_dB = 1000 * np.log10(psd[:padded_length // 2])
-        magnitudes = 100 * np.abs(fft_accel)[:padded_length // 2]
+        magnitudes = np.abs(fft_accel)[:padded_length // 2]  # Use raw magnitudes
 
         self.positive_freqs = freq[:padded_length // 2]
-        self.positive_magnitudes_dB = psd_dB if self.plot_mode == "PSD" else magnitudes
+        self.positive_magnitudes = magnitudes  # Store raw magnitudes
 
         # Filter out frequencies below 0.5 Hz
         min_frequency = 2
         valid_indices = self.positive_freqs >= min_frequency
         self.positive_freqs = self.positive_freqs[valid_indices]
-        self.positive_magnitudes_dB = self.positive_magnitudes_dB[valid_indices]
+        self.positive_magnitudes = self.positive_magnitudes[valid_indices]
 
         # Update peaks after filtering
-        peaks, _ = find_peaks(self.positive_magnitudes_dB, height=tolerance)
+        peaks, _ = find_peaks(self.positive_magnitudes, height=tolerance)
         self.natural_frequencies = self.positive_freqs[peaks]
-        peak_magnitudes = self.positive_magnitudes_dB[peaks]
+        self.peak_magnitudes = self.positive_magnitudes[peaks]
+
+        # Update the QListWidget with natural frequencies
+        self.freq_list_widget.clear()  # Clear the list
+        for freq in self.natural_frequencies:
+            self.freq_list_widget.addItem(f"{freq:.2f} Hz")
 
         # Plot data
         if not hasattr(self, 'fft_plot_data_item'):
             fft_pen = pg.mkPen(color='#F7F5FB', width=1)
             self.fft_plot_data_item = self.plot_widget_fft.plot(pen=fft_pen)
 
-        self.fft_plot_data_item.setData(self.positive_freqs, self.positive_magnitudes_dB)
+        self.fft_plot_data_item.setData(self.positive_freqs, self.positive_magnitudes)
 
-        # Plot peaks
+        # Plot peaks (natural frequencies)
         if not hasattr(self, 'fft_peak_item'):
             symbol_pen = pg.mkPen('#D8973C')
             symbol_brush = pg.mkBrush('#D8973C')
             self.fft_peak_item = self.plot_widget_fft.plot(pen=None, symbol='o', symbolPen=symbol_pen,
                                                            symbolBrush=symbol_brush)
 
-        self.fft_peak_item.setData(self.natural_frequencies, peak_magnitudes)
+        self.fft_peak_item.setData(self.natural_frequencies, self.peak_magnitudes)
 
         # Update plot labels and title
-        self.plot_widget_fft.setLabel('left', 'PSD (dB/Hz)' if self.plot_mode == "PSD" else 'Magnitude')
+        self.plot_widget_fft.setLabel('left', 'Magnitude')
         self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
-        mode_title = "PSD" if self.plot_mode == "PSD" else "FFT"
+        mode_title = "FFT"
         self.plot_widget_fft.setTitle(
             f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)")
+
+    def update_selected_frequencies(self):
+        selected_items = self.freq_list_widget.selectedItems()
+
+        # Get the selected frequencies
+        selected_freqs = [float(item.text().split()[0]) for item in selected_items]
+
+        # Find the indices of the selected frequencies in the positive frequencies
+        selected_indices = []
+        for freq in selected_freqs:
+            # Find the closest index to the selected frequency
+            idx = np.abs(self.positive_freqs - freq).argmin()
+            selected_indices.append(idx)
+
+        # Create an array of the selected frequencies and magnitudes
+        selected_natural_freqs = self.positive_freqs[selected_indices]
+
+        # Get corresponding magnitudes from the raw FFT magnitudes
+        selected_magnitudes = self.positive_magnitudes[selected_indices]
+
+        # Ensure both arrays have the same length for proper plotting
+        if len(selected_natural_freqs) > 0 and len(selected_magnitudes) > 0:
+            # Update the plot: set the selected frequencies and their magnitudes as the new data for the peaks
+            self.fft_peak_item.setData(selected_natural_freqs, selected_magnitudes)
+        else:
+            # Clear the plot if no frequencies are selected
+            self.fft_peak_item.setData([], [])
 
     def update_padding_factor(self, padding_factor):
         """ Update the padding factor when changed in settings """
@@ -464,7 +518,7 @@ class PlotFFT(QWidget):
         time = data['Time [microseconds]'].to_numpy() / 1e6  # Convert to seconds
         selected_axis = self.axis_selection.currentText()  # Selected axis (e.g., X, Y, Z)
         selected_accel = self.accel_id_selection.currentText()  # Selected accelerometer ID
-        accel_data = data[selected_axis].to_numpy()  # Get selected axis data
+        accel_data = 9.8124*data[selected_axis].to_numpy()  # Get selected axis data
 
         # Create the PlotDataItem if it doesn't already exist
         if not hasattr(self, 'time_plot_data_item'):
@@ -596,12 +650,21 @@ class PlotFFT(QWidget):
         start_time = self.start_time_slider.value()
         end_time = self.end_time_slider.value()
 
+        # Print out the time range for debugging
+        print(f"Start time: {start_time*100000}, End time: {end_time*100000}")
+
         # Filter the data within the selected time range
         trimmed_data = self.data_filtered[
-            (self.data_filtered['Time [microseconds]'] >= start_time) &
-            (self.data_filtered['Time [microseconds]'] <= end_time)
+            (self.data_filtered['Time [microseconds]'] >= start_time*100000) &
+            (self.data_filtered['Time [microseconds]'] <= end_time*100000)
             ]
 
+        # If the trimmed data is empty, print a message and exit
+        if trimmed_data.empty:
+            print("No data found within the selected time range.")
+            return
+
+        # Show file dialog to select where to save the CSV files
         file_dialog = QFileDialog()
         file_base_path, _ = file_dialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
 
@@ -613,22 +676,45 @@ class PlotFFT(QWidget):
 
             # Export frequency and magnitude data
             if hasattr(self, 'positive_freqs') and hasattr(self, 'positive_magnitudes_dB'):
-                freq_magnitude_data = pd.DataFrame({
-                    "Frequency (Hz)": self.positive_freqs,
-                    "Magnitude": self.positive_magnitudes_dB
-                })
-                freq_magnitude_path = f"{file_base_path}_frequency_magnitude.csv"
-                freq_magnitude_data.to_csv(freq_magnitude_path, index=False)
-                print(f"Frequency and magnitude data exported to {freq_magnitude_path}.")
+                # Ensure both frequency and magnitude arrays are of the same length
+                if len(self.positive_freqs) == len(self.positive_magnitudes_dB):
+                    freq_magnitude_data = pd.DataFrame({
+                        "Frequency (Hz)": self.positive_freqs,
+                        "Magnitude (dB)": self.positive_magnitudes_dB
+                    })
+                    freq_magnitude_path = f"{file_base_path}_frequency_magnitude.csv"
+                    freq_magnitude_data.to_csv(freq_magnitude_path, index=False)
+                    print(f"Frequency and magnitude data exported to {freq_magnitude_path}.")
+                else:
+                    print("Warning: Frequency and magnitude data arrays have mismatched lengths.")
             else:
                 print("Frequency and magnitude data are not available for export.")
 
-            # Export natural frequencies
+            # Export only selected natural frequencies if available
             if hasattr(self, 'natural_frequencies') and self.natural_frequencies.size > 0:
-                natural_freq_data = pd.DataFrame({"Natural Frequency (Hz)": self.natural_frequencies})
-                natural_freq_path = f"{file_base_path}_natural_frequencies.csv"
-                natural_freq_data.to_csv(natural_freq_path, index=False)
-                print(f"Natural frequencies exported to {natural_freq_path}.")
+                # Get the selected natural frequencies from the QListWidget
+                selected_items = self.freq_list_widget.selectedItems()
+                selected_freqs = [float(item.text().split()[0]) for item in selected_items]
+
+                if selected_freqs:
+                    # Filter the natural frequencies and corresponding magnitudes based on selected frequencies
+                    selected_indices = [np.abs(self.natural_frequencies - freq).argmin() for freq in selected_freqs]
+                    selected_magnitudes = self.peak_magnitudes[selected_indices]
+                    selected_natural_freqs = self.natural_frequencies[selected_indices]
+
+                    # Ensure both arrays have matching lengths
+                    if len(selected_natural_freqs) == len(selected_magnitudes):
+                        natural_freq_data = pd.DataFrame({
+                            "Natural Frequency (Hz)": selected_natural_freqs,
+                            "Magnitude (dB)": selected_magnitudes
+                        })
+                        natural_freq_path = f"{file_base_path}_selected_natural_frequencies.csv"
+                        natural_freq_data.to_csv(natural_freq_path, index=False)
+                        print(f"Selected natural frequencies exported to {natural_freq_path}.")
+                    else:
+                        print("Warning: Mismatched lengths between selected frequencies and magnitudes.")
+                else:
+                    print("No natural frequencies selected for export.")
             else:
                 print("Natural frequency data is not available for export.")
 
@@ -1009,7 +1095,7 @@ class SerialPlotterWindow(QMainWindow):
     def export_data(self):
         self.data_recorder.export_data()
 
-def load_stylesheet(app, style_name="style_dark"):
+def load_stylesheet(app, style_name="style_empty"):
     # Map stylesheet names to file paths
     stylesheet_path = os.path.join(os.path.dirname(__file__), f"Preferences/{style_name}.qss")
 

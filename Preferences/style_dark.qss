@@ -22,16 +22,12 @@ QPushButton:hover {
 QLabel {
     font-size: 12px;
     font-weight: bold;
-    border-radius: 5px; /* Optional if you want rounded labels */
     color: #CCCCCC; /* General label color */
 }
 
-#combo_label {
-    color: #CCCCCC; /* Color for specific label */
-}
-
+/* Heading Label Styles */
 #heading_label {
-    color: #CCCCCC; /* Color for heading label */
+    color: #CCCCCC; /* Heading color */
     font-size: 18px;
 }
 
@@ -61,6 +57,65 @@ QComboBox QAbstractItemView {
     color: white; /* Text color for dropdown items */
 }
 
+/* QListWidget Styles */
+QListWidget {
+    background-color: #2b2b2b; /* Dark background */
+    border: 1px solid #444444; /* Border around the QListWidget */
+    color: #F7F5FB; /* Text color */
+    padding: 5px;
+    font-size: 12px;
+    border-radius: 10px; /* Rounded corners for the QListWidget */
+}
+
+QListWidget::item {
+    background-color: #2b2b2b; /* Background color for items */
+    border: 1px solid transparent; /* No border for individual items */
+    padding: 5px;
+}
+
+QListWidget::item:selected {
+    background-color: #BD632F; /* Button color for selected items */
+    color: white; /* Text color for selected items */
+}
+
+QListWidget::item:hover {
+    background-color: #444444; /* Hover effect for items */
+    color: #BD632F; /* Change text color on hover */
+}
+
+QListWidget::item:selected:!active {
+    background-color: #BD632F; /* Same as selected, but for inactive items */
+}
+
+/* Scrollbar Styling */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #2b2b2b; /* Dark background for the scrollbar */
+    border: 1px solid #444444; /* Border around the scrollbar */
+    width: 10px; /* Width of the vertical scrollbar */
+    height: 10px; /* Height of the horizontal scrollbar */
+    border-radius: 10px; /* Rounded corners for the scrollbar */
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #BD632F; /* Orange color for the scrollbar handle */
+    border-radius: 5px; /* Rounded corners for the scrollbar handle */
+}
+
+QScrollBar::handle:vertical:hover, QScrollBar::handle:horizontal:hover {
+    background: #5e4125; /* Darker orange color on hover */
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    background: none; /* Remove arrows or line buttons */
+    border: none;
+}
+
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: none; /* Hide the add/sub pages */
+}
+
 /* Scroll Area Styles */
 #scroll {
     background-color: #2b2b2b; /* Scroll area background */
@@ -84,7 +139,7 @@ QTextEdit, QLineEdit {
 
 /* General Widget Styles */
 QWidget {
-    /* border-radius: 10px;*/
+    /* border-radius: 10px; */
 }
 
 /* Dialog Styles */
