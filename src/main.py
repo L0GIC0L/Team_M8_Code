@@ -3,8 +3,6 @@ import sys
 from PySide6.QtWidgets import QApplication
 
 from main_window import MainWindow
-from settings_tab import load_stylesheet
-
 
 def main():
     app = QApplication(sys.argv)

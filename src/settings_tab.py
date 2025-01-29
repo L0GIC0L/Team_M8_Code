@@ -52,7 +52,7 @@ class Settings(QWidget):
 
         # Dropdown (ComboBox) for selecting stylesheet
         self.stylesheet_dropdown = QComboBox()
-        self.stylesheet_dropdown.addItems(["Default", "Dark Mode", "Light Mode"])
+        self.stylesheet_dropdown.addItems(["Default", "Dark Mode", "Light Mode","AMERICA","Abomination"])
         self.stylesheet_dropdown.currentIndexChanged.connect(self.change_stylesheet)
         right_layout.addWidget(self.stylesheet_dropdown)
 
@@ -68,34 +68,25 @@ class Settings(QWidget):
         self.padding_label.setText(f"PF={padding_factor}")
         self.plot_fft.update_padding_factor(padding_factor)
 
+    def apply_stylesheet(self, selected_style):
+        if selected_style == "Default":
+            load_stylesheet(QApplication.instance(), "style_blank")
+        elif selected_style == "Dark Mode":
+            load_stylesheet(QApplication.instance(), "style_dark")
+        elif selected_style == "Light Mode":
+            load_stylesheet(QApplication.instance(), "style_light")
+        elif selected_style == "AMERICA":
+            load_stylesheet(QApplication.instance(), "style_AMERICA")
+        elif selected_style == "Abomination":
+            load_stylesheet(QApplication.instance(), "style_abomination")
 
+        source_color = self.plot_fft.container_widget.palette().color(self.plot_fft.container_widget.backgroundRole())
+        color_hex = source_color.name()
+        self.plot_fft.set_background(color_hex)
+        self.plot_serial.update_plot_settings()
 
     def change_stylesheet(self):
         selected_style = self.stylesheet_dropdown.currentText()
-        if selected_style == "Default":
-            load_stylesheet(QApplication.instance(), "style_blank")  # Directly calling the function
-
-            source_color = self.plot_fft.container_widget.palette().color(
-            self.plot_fft.container_widget.backgroundRole())
-            color_hex = source_color.name()
-            self.plot_fft.set_background(color_hex)
-            self.plot_serial.set_background(color_hex)
+        self.apply_stylesheet(selected_style)
 
 
-        elif selected_style == "Dark Mode":
-            load_stylesheet(QApplication.instance(), "style_dark")
-
-            source_color = self.plot_fft.container_widget.palette().color(
-            self.plot_fft.container_widget.backgroundRole())
-            color_hex = source_color.name()
-            self.plot_fft.set_background(color_hex)
-            self.plot_serial.set_background(color_hex)
-
-        elif selected_style == "Light Mode":
-            load_stylesheet(QApplication.instance(), "style_light")
-
-            source_color = self.plot_fft.container_widget.palette().color(
-            self.plot_fft.container_widget.backgroundRole())
-            color_hex = source_color.name()
-            self.plot_fft.set_background(color_hex)
-            self.plot_serial.set_background(color_hex)

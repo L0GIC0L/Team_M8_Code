@@ -116,7 +116,7 @@ class DataRecorder:
 
     def export_default(self):
         # Create the directory if it does not exist
-        directory = os.path.expanduser("Cached_Samples/")  # Use expanduser to handle home directory
+        directory = os.path.expanduser("../Cached_Samples/")  # Use expanduser to handle home directory
         os.makedirs(directory, exist_ok=True)  # Create the directory if it doesn't exist
 
         if len(self.data_records) > 0:

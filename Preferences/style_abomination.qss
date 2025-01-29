@@ -1,0 +1,115 @@
+/* Common colors */
+QMainWindow {
+    background-color: #FF00FF; /* Eye-burning magenta */
+}
+
+/* Button Styles */
+QPushButton {
+    background-color: #FFFF00; /* Blinding yellow */
+    color: #00FF00; /* Neon green text */
+    border: 3px dashed #0000FF; /* Ugly dashed blue border */
+    padding: 2px;
+    font-size: 20px;
+    font-weight: bold;
+    text-transform: uppercase;
+    border-radius: 0px; /* No rounded corners */
+}
+
+QPushButton:hover {
+    background-color: #FF0000; /* Red on hover */
+    color: #FFFFFF; /* White text */
+}
+
+/* Label Styles */
+QLabel {
+    font-size: 24px;
+    font-weight: bolder;
+    color: #000000; /* Black text */
+    background-color: #00FFFF; /* Cyan background */
+    text-decoration: underline;
+}
+
+/* ComboBox Styles */
+QComboBox {
+    padding: 10px;
+    font-size: 18px;
+    background-color: #FFA500; /* Bright orange */
+    color: #800080; /* Deep purple */
+    border: 5px double #008000; /* Thick green double border */
+    border-radius: 0px;
+}
+
+QComboBox:hover {
+    background-color: #FF4500; /* Even more orange */
+}
+
+#graphy {
+    border-radius: 10px; /* Rounded corners */
+    background-color: #00FF00; /* Background for graph container */
+}
+
+/* QListWidget Styles */
+QListWidget {
+    background-color: #FF0000; /* Black background */
+    color: #FFFF00; /* Yellow text */
+    font-size: 16px;
+    font-weight: bold;
+    border: 4px solid #FF69B4; /* Thick pink border */
+}
+
+QListWidget::item:selected {
+    background-color: #008000; /* Dark green */
+    color: #FF0000; /* Red text */
+}
+
+/* Scrollbar Styling */
+QScrollBar:vertical, QScrollBar:horizontal {
+    background: #4B0082; /* Dark purple */
+    border: 2px dashed #FFFF00; /* Yellow dashed border */
+}
+
+QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+    background: #FFD700; /* Gold */
+    border: 3px solid #00FFFF; /* Cyan border */
+}
+
+/* Text Edit and Line Edit Styles */
+QTextEdit, QLineEdit {
+    background-color: #FF0000; /* Bright red */
+    color: #00FF00; /* Green text */
+    font-size: 18px;
+    font-weight: bold;
+    border: 4px dotted #0000FF; /* Blue dotted border */
+}
+
+/* Menu Styles */
+QMenu {
+    background-color: #00FFFF; /* Cyan */
+    color: #FF00FF; /* Magenta */
+}
+
+QMenu::item:selected {
+    background-color: #000000; /* Black */
+    color: #FFFFFF; /* White text */
+}
+
+/* ToolTip Styles */
+QToolTip {
+    background-color: #FF00FF; /* Magenta */
+    color: #00FF00; /* Green text */
+    border: 2px solid #FFFF00; /* Yellow border */
+}
+
+/* Slider styles */
+QSlider::groove:horizontal {
+    background-color: #0000FF; /* Blue */
+}
+
+QSlider::handle:horizontal {
+    background-color: #FF0000; /* Red handle */
+    width: 20px;
+}
+
+QSlider::handle:horizontal:hover {
+    background-color: #FFFF00; /* Yellow */
+}

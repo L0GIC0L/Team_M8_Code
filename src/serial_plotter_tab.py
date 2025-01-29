@@ -31,11 +31,6 @@ class SerialPlotterTab(QWidget):
         # Initialize sensor data storage
         self.init_sensor_data()
 
-    def set_background(self, hex_color):
-        self.color_hex = hex_color
-        self.sensor_plot_widget.setBackground(self.color_hex)
-        self.update_plot_settings()
-
     def setup_options_menu(self):
         self.serial_ports = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
         self.current_port_index = 0  # Default to the second port in the list
@@ -162,7 +157,6 @@ class SerialPlotterTab(QWidget):
             # Default case for unrecognized sensor_id (green variations)
             return ["#008000", "#32CD32", "#90EE90"]  # Green, Lime Green, Pale Green
 
-
     def add_sensor_plot(self, sensor_id, row, max_points=300,update_rate=30, hex_color="#2b2b2b"):
         self.container_widget = QWidget()
         self.container_widget.setObjectName("graphy")  # Set object name
@@ -190,39 +184,48 @@ class SerialPlotterTab(QWidget):
         self.plot_layout.addWidget(self.container_widget, row, 0)
 
     def update_plot_settings(self):
-        # Get the selected max points value from the max points dropdown
+        print(f"Starting update_plot_settings")
         selected_max_points = int(self.max_points_combo.currentText())
-
-        # Get the selected update speed (in FPS) from the update speed dropdown
         selected_update_rate = int(self.update_speed_combo.currentText())
-
-        source_color = self.container_widget.palette().color(
-        self.container_widget.backgroundRole())
+        source_color = self.container_widget.palette().color(self.container_widget.backgroundRole())
         hex_color = source_color.name()
 
-        # Remove existing sensor plots and their connectors
-        for sensor_id in list(self.data_connectors.keys()):
-            # Remove the sensor's plot (if needed)
-            self.remove_sensor_plot(sensor_id)
+        # Get valid sensor IDs (ensure positive)
+        existing_sensors = {abs(s_id) for (s_id, axis) in self.data_connectors.keys()}
+        print(f"Existing sensors: {existing_sensors}")
 
-        # Re-add all sensor plots with the new max_points and update_rate values
-        for sensor_id in range(1, self.sensor_count + 1):
-            self.add_sensor_plot(sensor_id-1, sensor_id - 1, max_points=selected_max_points, update_rate=selected_update_rate, hex_color=hex_color)
+        # Remove existing plots from the specified column
+        self.remove_widgets_in_column(0)  # Assuming you want to clear column 0
 
-    def remove_sensor_plot(self, sensor_id):
-        # Helper method to remove a plot and its connector
-        # Iterate over all children in the layout and find the container for this sensor
-        for widget in self.plot_layout.findChildren(QWidget):
-            if widget.findChild(LivePlotWidget):
-                plot_widget = widget.findChild(LivePlotWidget)
-                if plot_widget.title() == f'Sensor ID: {sensor_id}':
-                    # Remove the widget from the layout and clean up the data connector
+        # Re-add plots in proper grid positions
+        row = 0
+        for sensor_id in sorted(existing_sensors):
+            print(f"Adding sensor {sensor_id} at row {row}")
+            self.add_sensor_plot(
+                row,  # Use row as grid position
+                sensor_id,
+                max_points=selected_max_points,
+                update_rate=selected_update_rate,
+                hex_color=hex_color
+            )
+            row += 1
+
+    def remove_widgets_in_column(self, column_index):
+        print(f"Removing all widgets in column {column_index}")
+
+        # Iterate through all items in the layout
+        for i in reversed(range(self.plot_layout.count())):
+            item = self.plot_layout.itemAt(i)
+            widget = item.widget()
+
+            if widget is not None:
+                # Check if the widget is in the specified column
+                pos = self.plot_layout.getItemPosition(i)
+                if pos[1] == column_index:  # pos[1] is the column position
+                    print(f"Removing widget at position {pos}")
                     self.plot_layout.removeWidget(widget)
+                    widget.setParent(None)
                     widget.deleteLater()
-                    # Remove the corresponding data connectors
-                    for axis in ['X', 'Y', 'Z']:
-                        self.data_connectors[(sensor_id, axis)] = None
-                    return  # Stop once the correct plot is found and removed
 
     def speed_button(self):
         selected_speed = int(self.communication_speed_combo.currentText())
