@@ -23,6 +23,7 @@ class SerialPlotterTab(QWidget):
         # Initialize SerialReader
         self.serial_reader = SerialReader()
         self.serial_reader.data_received.connect(self.update_data_buffers)
+        self.serial_reader.start()
         self.serial_reader.start_serial()  # Start reading from the default port
 
         # Options Menu
@@ -35,10 +36,11 @@ class SerialPlotterTab(QWidget):
         self.serial_ports = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyUSB0", "/dev/ttyUSB1", "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9"]
         self.current_port_index = 0  # Default to the second port in the list
 
-        self.communication_speeds = [400, 500, 600, 1000, 2000, 4000, 8000, 10000, 100000]
+        self.communication_speeds = [0, 100, 200, 300, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 2000, 4000, 8000, 10000, 100000]
         self.selected_speed_index = 0
 
         self.data_recorder = DataRecorder()  # Create an instance of DataRecorder
+        self.data_recorder.start()
 
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
@@ -259,12 +261,15 @@ class SerialPlotterTab(QWidget):
 
     def toggle_recording(self):
         if self.record_button.text() == "Start Recording":
+            self.toggle_plotting(0)
+
             # Start recording
             self.data_recorder.start_recording()
             self.record_button.setText("Stop Recording")
             self.record_button.setStyleSheet("background-color: #A4243B; color: white;")
         else:
             # Stop recording
+            self.toggle_plotting(2)
             self.data_recorder.stop_recording()
             self.record_button.setText("Start Recording")
             self.record_button.setStyleSheet("background-color: #2C6E49; color: white;")
