@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QGridLayout, QWidget, QPushButton, QVBoxLayout, \
     QSlider, QListWidget, QListWidgetItem
 from scipy.signal import find_peaks, welch
 
-
 class PlotFFT(QWidget):
     def __init__(self):
         super().__init__()
@@ -65,10 +64,6 @@ class PlotFFT(QWidget):
         self.end_time_slider.setValue(100)
         self.tolerance_slider.setValue(1000)  # default tolerance
 
-        self.start_time_slider.valueChanged.connect(self.update_plot)
-        self.end_time_slider.valueChanged.connect(self.update_plot)
-        self.tolerance_slider.valueChanged.connect(self.update_plot)
-
         # Create the combo box for axis selection
         self.axis_selection = QComboBox()
         self.axis_selection.addItems(["X Acceleration", "Y Acceleration", "Z Acceleration"])
@@ -106,21 +101,37 @@ class PlotFFT(QWidget):
         # Add the horizontal layout to the left layout
         left_layout.addLayout(accel_row)
 
+        # Initialize your QTimer
+        self.slider_timer = QTimer()
+        self.slider_timer.setSingleShot(True)
+        self.slider_timer.setInterval(200)  # Interval in milliseconds (adjust as needed)
+        self.slider_timer.timeout.connect(self.update_plot)
+
         # Create a QGridLayout for the sliders and their labels
         slider_grid = QGridLayout()
 
         # Add labels and sliders next to each other in rows
-        slider_grid.addWidget(self.start_time_label, 0, 0)  # Row 0, Column 0
-        slider_grid.addWidget(self.start_time_slider, 0, 1)  # Row 0, Column 1
-
-        slider_grid.addWidget(self.end_time_label, 1, 0)  # Row 1, Column 0
-        slider_grid.addWidget(self.end_time_slider, 1, 1)  # Row 1, Column 1
-
-        slider_grid.addWidget(self.tolerance_label, 2, 0)  # Row 2, Column 0
-        slider_grid.addWidget(self.tolerance_slider, 2, 1)  # Row 2, Column 1
+        slider_grid.addWidget(self.start_time_label, 0, 0)
+        slider_grid.addWidget(self.start_time_slider, 0, 1)
+        slider_grid.addWidget(self.end_time_label, 1, 0)
+        slider_grid.addWidget(self.end_time_slider, 1, 1)
+        slider_grid.addWidget(self.tolerance_label, 2, 0)
+        slider_grid.addWidget(self.tolerance_slider, 2, 1)
 
         # Add the slider grid to the left layout
         left_layout.addLayout(slider_grid)
+
+        # *** Remove the disconnect calls since they're not necessary ***
+
+        # Connect valueChanged signals to the custom handler
+        self.start_time_slider.valueChanged.connect(self.on_slider_value_changed)
+        self.end_time_slider.valueChanged.connect(self.on_slider_value_changed)
+        self.tolerance_slider.valueChanged.connect(self.on_slider_value_changed)
+
+        # Connect sliderReleased signals to the release handler
+        self.start_time_slider.sliderReleased.connect(self.on_slider_released)
+        self.end_time_slider.sliderReleased.connect(self.on_slider_released)
+        self.tolerance_slider.sliderReleased.connect(self.on_slider_released)
 
         # Assuming `left_layout` is your left side layout, create a QGridLayout for the buttons
         button_grid = QGridLayout()
@@ -172,110 +183,51 @@ class PlotFFT(QWidget):
         self.plot_widget_time.setBackground(self.color_hex)
         self.plot_widget_fft.setBackground(self.color_hex)
 
-    def plot_frequency_domain(self, data, start_time, end_time, tolerance, padding_factor):
-        # Extract data and compute FFT or PSD based on plot_mode
-        selected_axis = self.axis_selection.currentText()
-        selected_accel = self.accel_id_selection.currentText()
-        accel_data = 9.8124 * data[selected_axis].to_numpy()
-        time = data['Time [microseconds]'].to_numpy()
-        self.padding_factor = padding_factor
-
-        N = len(accel_data)
-        if N < 2:
-            print("Not enough data points for FFT.")
-            return
-
-        dt = np.mean(np.diff(time)) * 1e-6  # Time difference in seconds
-        if dt <= 0:
-            print("Invalid time difference; cannot compute FFT.")
-            return
-
-        hamming_window = np.blackman(N)
-        accel_data_windowed = accel_data * hamming_window
-
-        # Zero-padding: Calculate the padded length based on the padding factor
-        padded_length = int(N * self.padding_factor)
-        accel_data_padded = np.pad(accel_data_windowed, (0, padded_length - N), mode='constant')
-
-        if self.plot_mode == "FFT":
-            # Compute FFT with zero-padded data
-            freq = np.fft.fftfreq(padded_length, d=dt)
-            fft_accel = np.fft.fft(accel_data_padded)
-            magnitudes = np.abs(fft_accel)[:padded_length // 2]  # Use raw magnitudes
-
-            self.positive_freqs = freq[:padded_length // 2]
-            self.positive_magnitudes = magnitudes  # Store raw magnitudes
-
-        elif self.plot_mode == "PSD":
-            freq, psd = welch(accel_data_padded, fs=1/dt, nperseg=padded_length, noverlap=padded_length//2)
-            self.positive_freqs = freq
-            self.positive_magnitudes = (1e9)*psd
-
-        # Filter out frequencies below 0.5 Hz
-        min_frequency = 2
-        valid_indices = self.positive_freqs >= min_frequency
-        self.positive_freqs = self.positive_freqs[valid_indices]
-        self.positive_magnitudes = self.positive_magnitudes[valid_indices]
-
-        # Update peaks after filtering
-        peaks, _ = find_peaks(self.positive_magnitudes, height=tolerance)
-        self.natural_frequencies = self.positive_freqs[peaks]
-        self.peak_magnitudes = self.positive_magnitudes[peaks]
-
-        # Update the QListWidget with natural frequencies
-        self.freq_list_widget.clear()  # Clear the list
-        for freq in self.natural_frequencies:
-            self.freq_list_widget.addItem(f"{freq:.2f} Hz")
-
-        # Plot data
-        if not hasattr(self, 'fft_plot_data_item'):
-            fft_pen = pg.mkPen(color='#F7F5FB', width=1)
-            self.fft_plot_data_item = self.plot_widget_fft.plot(pen=fft_pen)
-
-        self.fft_plot_data_item.setData(self.positive_freqs, self.positive_magnitudes)
-
-        # Plot peaks (natural frequencies)
-        if not hasattr(self, 'fft_peak_item'):
-            symbol_pen = pg.mkPen('#D8973C')
-            symbol_brush = pg.mkBrush('#D8973C')
-            self.fft_peak_item = self.plot_widget_fft.plot(pen=None, symbol='o', symbolPen=symbol_pen,
-                                                           symbolBrush=symbol_brush)
-
-        self.fft_peak_item.setData(self.natural_frequencies, self.peak_magnitudes)
-
-        # Update plot labels and title
-        self.plot_widget_fft.setLabel('left', 'Magnitude')
-        self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
-        mode_title = "FFT" if self.plot_mode == "FFT" else "PSD"
-        self.plot_widget_fft.setTitle(
-            f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)")
-
     def update_selected_frequencies(self):
         selected_items = self.freq_list_widget.selectedItems()
 
         # Get the selected frequencies
         selected_freqs = [float(item.text().split()[0]) for item in selected_items]
 
-        # Find the indices of the selected frequencies in the positive frequencies
-        selected_indices = []
-        for freq in selected_freqs:
-            # Find the closest index to the selected frequency
-            idx = np.abs(self.positive_freqs - freq).argmin()
-            selected_indices.append(idx)
+        # Clear existing selected peaks if any
+        if hasattr(self, 'selected_peaks_item'):
+            self.plot_widget_fft.removeItem(self.selected_peaks_item)
+            del self.selected_peaks_item
 
-        # Create an array of the selected frequencies and magnitudes
-        selected_natural_freqs = self.positive_freqs[selected_indices]
+        # Collect data for the selected frequencies
+        selected_natural_freqs = []
+        selected_magnitudes = []
 
-        # Get corresponding magnitudes from the raw FFT magnitudes
-        selected_magnitudes = self.positive_magnitudes[selected_indices]
+        # Loop over stored frequency data for each dataset
+        for freq_data in self.datasets_freq_data:
+            positive_freqs = freq_data['positive_freqs']
+            positive_magnitudes = freq_data['positive_magnitudes']
 
-        # Ensure both arrays have the same length for proper plotting
-        if len(selected_natural_freqs) > 0 and len(selected_magnitudes) > 0:
-            # Update the plot: set the selected frequencies and their magnitudes as the new data for the peaks
-            self.fft_peak_item.setData(selected_natural_freqs, selected_magnitudes)
+            if len(positive_freqs) == 0:
+                continue
+
+            for freq in selected_freqs:
+                # Find the index of the frequency closest to the selected frequency
+                idx = np.abs(positive_freqs - freq).argmin()
+                selected_natural_freqs.append(positive_freqs[idx])
+                selected_magnitudes.append(positive_magnitudes[idx])
+
+        # Plot the selected frequencies as peaks
+        if selected_natural_freqs and selected_magnitudes:
+            symbol_pen = pg.mkPen('w')  # White color for selected peaks
+            symbol_brush = pg.mkBrush('w')
+            self.selected_peaks_item = pg.ScatterPlotItem(
+                x=selected_natural_freqs,
+                y=selected_magnitudes,
+                pen=symbol_pen,
+                brush=symbol_brush,
+                size=12,
+                symbol='o'
+            )
+            self.plot_widget_fft.addItem(self.selected_peaks_item)
+            self.selected_peaks_item.setZValue(15)
         else:
-            # Clear the plot if no frequencies are selected
-            self.fft_peak_item.setData([], [])
+            print("No frequencies selected or no data available to plot selected frequencies.")
 
     def update_padding_factor(self, padding_factor):
         """ Update the padding factor when changed in settings """
@@ -284,7 +236,11 @@ class PlotFFT(QWidget):
         self.update_plot()
 
     def open_last_sample(self):
-        directory, pattern = "../Cached_Samples/", r"samples_\d{8}_\d{6}\.csv"
+        import os
+        import re
+
+        directory = "../Cached_Samples/"
+        pattern = r"samples_\d{8}_\d{6}\.csv"
         files = [f for f in os.listdir(directory) if re.match(pattern, f)]
         if not files:
             print("No matching files found.")
@@ -292,16 +248,29 @@ class PlotFFT(QWidget):
 
         newest_file = max([os.path.join(directory, f) for f in files], key=os.path.getmtime)
         print(f"Opening newest file: {newest_file}")
-        self.data = self.load_data(newest_file)
-        self.data_filtered = self.filter_data(self.data)
 
-        if not self.data_filtered.empty:
-            self.setup_sliders()
-            self.plot_time_domain(self.data_filtered)
-            self.plot_frequency_domain(self.data_filtered, self.start_time_slider.value(),
-                                       self.end_time_slider.value(), self.tolerance_slider.value(), self.padding_factor)
+        # Load data with dataset_index
+        data = self.load_data(newest_file, dataset_index=0)
+
+        if not data.empty:
+            # Filter the data
+            data_filtered = self.filter_data(data)
+
+            if not data_filtered.empty:
+                # Initialize self.datasets
+                self.datasets = [data_filtered]
+
+                # Initialize dataset colors
+                self.dataset_colors = [pg.intColor(i) for i in range(len(self.datasets))]
+
+                # Proceed with setup and plotting
+                self.setup_sliders()
+                self.plot_time_domain(self.datasets)
+                self.plot_frequency_domain(self.datasets)
+            else:
+                print("No data available after filtering.")
         else:
-            print("No data available after filtering.")
+            print("No data loaded from the file.")
 
     def toggle_plot(self):
         # Toggle between PSD and FFT plotting.
@@ -315,7 +284,145 @@ class PlotFFT(QWidget):
         # Update the plot with the current mode
         self.update_plot()
 
-    def load_data(self, file_path):
+    def update_labels(self):
+        # Update the labels to show actual time values and tolerance.
+        start_time = (self.start_time_slider.value() )*100000 # Get actual time values from sliders
+        end_time = (self.end_time_slider.value() )*100000
+        tolerance_value = self.tolerance_slider.value()
+
+        # Update the labels with the actual time values
+        self.start_time_label.setText(f"Start Time: {start_time} µs")
+        self.end_time_label.setText(f"End Time: {end_time} µs")
+        self.tolerance_label.setText(f"Tolerance: {tolerance_value} dB")
+
+    def export_data(self):
+        # Check if there are any filtered datasets to export
+        if not self.datasets_filtered or all(df.empty for df in self.datasets_filtered):
+            print("No data to export.")
+            return
+
+        # Show file dialog to select where to save the CSV files
+        file_dialog = QFileDialog()
+        file_base_path, _ = file_dialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
+
+        if file_base_path:
+            # Export trimmed time-range data for each dataset
+            for i, trimmed_data in enumerate(self.datasets_filtered):
+                if trimmed_data.empty:
+                    continue
+
+                # Get the current slider time range
+                start_time = self.start_time_slider.value()
+                end_time = self.end_time_slider.value()
+
+                # Filter the data within the selected time range
+                trimmed_data_in_range = trimmed_data[
+                    (trimmed_data['Time [microseconds]'] >= start_time * 1e6) &
+                    (trimmed_data['Time [microseconds]'] <= end_time * 1e6)
+                    ]
+
+                if trimmed_data_in_range.empty:
+                    print(f"No data found within the selected time range for Dataset {i + 1}.")
+                    continue
+
+                # Export trimmed data to CSV
+                trimmed_data_path = f"{file_base_path}_Dataset_{i + 1}_trimmed_data.csv"
+                trimmed_data_in_range.to_csv(trimmed_data_path, index=False)
+                print(f"Trimmed acceleration data for Dataset {i + 1} exported to {trimmed_data_path}.")
+
+            # Export frequency and magnitude data for each dataset
+            if hasattr(self, 'datasets_freq_data') and self.datasets_freq_data:
+                for i, freq_data in enumerate(self.datasets_freq_data):
+                    positive_freqs = freq_data['positive_freqs']
+                    positive_magnitudes = freq_data['positive_magnitudes']
+
+                    # Convert magnitudes to dB if needed (assuming you may want to)
+                    positive_magnitudes_dB = 20 * np.log10(positive_magnitudes)
+
+                    freq_magnitude_data = pd.DataFrame({
+                        "Frequency (Hz)": positive_freqs,
+                        "Magnitude (dB)": positive_magnitudes_dB
+                    })
+
+                    freq_magnitude_path = f"{file_base_path}_Dataset_{i + 1}_frequency_magnitude.csv"
+                    freq_magnitude_data.to_csv(freq_magnitude_path, index=False)
+                    print(f"Frequency and magnitude data for Dataset {i + 1} exported to {freq_magnitude_path}.")
+            else:
+                print("Frequency and magnitude data are not available for export.")
+
+            # Export selected natural frequencies
+            if hasattr(self, 'freq_list_widget'):
+                selected_items = self.freq_list_widget.selectedItems()
+                if selected_items:
+                    selected_freqs = [float(item.text().split()[0]) for item in selected_items]
+
+                    # Collect natural frequencies and magnitudes from all datasets
+                    selected_natural_freqs = []
+                    selected_magnitudes = []
+
+                    for freq in selected_freqs:
+                        for freq_data in self.datasets_freq_data:
+                            positive_freqs = freq_data['positive_freqs']
+                            positive_magnitudes = freq_data['positive_magnitudes']
+
+                            if len(positive_freqs) == 0:
+                                continue
+
+                            idx = np.abs(positive_freqs - freq).argmin()
+                            selected_natural_freqs.append(positive_freqs[idx])
+                            selected_magnitudes.append(positive_magnitudes[idx])
+
+                    if selected_natural_freqs and selected_magnitudes:
+                        # Convert magnitudes to dB if needed
+                        selected_magnitudes_dB = 20 * np.log10(selected_magnitudes)
+
+                        natural_freq_data = pd.DataFrame({
+                            "Natural Frequency (Hz)": selected_natural_freqs,
+                            "Magnitude (dB)": selected_magnitudes_dB
+                        })
+
+                        natural_freq_path = f"{file_base_path}_selected_natural_frequencies.csv"
+                        natural_freq_data.to_csv(natural_freq_path, index=False)
+                        print(f"Selected natural frequencies exported to {natural_freq_path}.")
+                    else:
+                        print("No matching natural frequencies found in datasets for export.")
+                else:
+                    print("No natural frequencies selected for export.")
+            else:
+                print("Natural frequency data is not available for export.")
+
+    def open_csv(self):
+        # Open a file dialog to select and load multiple CSV files.
+        file_dialog = QFileDialog()
+        file_paths, _ = file_dialog.getOpenFileNames(self, "Open CSV Files", "", "CSV Files (*.csv)")
+
+        if file_paths:
+            self.datasets = []  # Initialize datasets list to store multiple DataFrames
+            all_unique_ids = set()  # To store unique accelerometer IDs across all files
+            self.dataset_colors = {}  # Dictionary to store color for each dataset, keyed by index
+            colors = ['#2541B2', '#D8973C', '#34A5DA', '#F7F5FB', '#A14A44', '#44A1A0']  # Color palette
+
+            for i, file_path in enumerate(file_paths):
+                data = self.load_data(file_path, i)  # Pass index to load_data
+                if not data.empty:
+                    self.datasets.append(data)  # Append each loaded DataFrame to the datasets list
+                    self.dataset_colors[i] = colors[i % len(colors)]  # Assign color from palette, cycling if needed
+                    if 'Accelerometer ID' in data.columns:
+                        unique_ids = set(
+                            map(str, data['Accelerometer ID'].unique()))  # Convert IDs to string to be consistent
+                        all_unique_ids.update(unique_ids)  # Add unique IDs to the set
+
+            if self.datasets:
+                # Update accelerometer ID combo box with unique IDs from all loaded datasets
+                sorted_ids = sorted(list(all_unique_ids))
+                self.accel_id_selection.clear()
+                self.accel_id_selection.addItems(sorted_ids)
+
+                self.filter_and_plot_all()
+            else:
+                print("No valid data loaded from the selected files.")
+
+    def load_data(self, file_path, dataset_index):  # Modified load_data to accept dataset_index
         try:
             data = pd.read_csv(file_path)
 
@@ -325,11 +432,14 @@ class PlotFFT(QWidget):
 
             data = data.sort_values(by='Time [microseconds]')
 
-            # Update accelerometer ID combo box
-            if 'Accelerometer ID' in data.columns:
-                unique_ids = sorted(data['Accelerometer ID'].unique())
-                self.accel_id_selection.clear()
-                self.accel_id_selection.addItems([str(id) for id in unique_ids])
+            # Reset time to start from 0 for each dataset
+            min_time = data['Time [microseconds]'].min()
+            data['Time [microseconds]'] = data['Time [microseconds]'] - min_time
+
+            # Add a Dataset Index column to identify each dataset later if needed
+            data['Dataset Index'] = dataset_index
+
+            # Update accelerometer ID combo box will now be handled in open_csv after loading all datasets
 
             return data
 
@@ -337,43 +447,41 @@ class PlotFFT(QWidget):
             print(f"Error loading data: {e}")
             return pd.DataFrame()
 
-    def plot_time_domain(self, data):
-        # Extract time and acceleration data
-        time = data['Time [microseconds]'].to_numpy() / 1e6  # Convert to seconds
-        selected_axis = self.axis_selection.currentText()  # Selected axis (e.g., X, Y, Z)
-        selected_accel = self.accel_id_selection.currentText()  # Selected accelerometer ID
-        accel_data = 9.8124*data[selected_axis].to_numpy()  # Get selected axis data
+    def filter_and_plot_all(self):
+        """Filters all loaded datasets, sets up sliders, and plots time and frequency domains."""
+        if not self.datasets:
+            print("No datasets loaded to filter and plot.")
+            return
 
-        # Create the PlotDataItem if it doesn't already exist
-        if not hasattr(self, 'time_plot_data_item'):
-            pen = pg.mkPen(color='#2541B2', width=1)
-            self.time_plot_data_item = self.plot_widget_time.plot(pen=pen, name=selected_axis)
+        # Refilter all datasets based on current accelerometer ID selection
+        datasets_filtered = [self.filter_data(dataset) for dataset in self.datasets]
+        self.datasets_filtered = [df for df in datasets_filtered if not df.empty]  # Update self.datasets_filtered
 
-        # Update the PlotDataItem's data
-        self.time_plot_data_item.setData(time, accel_data)
+        if not self.datasets_filtered:
+            print("No data available after filtering for the selected Accelerometer ID.")
+            self.plot_time_domain([])  # Clear time domain plot
+            self.plot_frequency_domain([])  # Clear frequency domain plot
+            self.freq_list_widget.clear()  # Clear frequency list
+            return
 
-        # Update plot labels and title
-        self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
-        self.plot_widget_time.setLabel('bottom', 'Time (s)')
-        self.plot_widget_time.setTitle(f"Accelerometer {selected_accel}: {selected_axis} (Time Domain)")
+        self.setup_sliders()  # Setup sliders based on the filtered datasets
+        self.update_plot()  # Use update_plot to handle plotting based on current slider and other settings
 
-
-    def filter_data(self, data):
-        if data.empty:
-            return data
+    def filter_data(self, dataset):
+        if dataset.empty:
+            return pd.DataFrame()
 
         # Filter by selected accelerometer ID first
         selected_id = self.accel_id_selection.currentText()
-        if selected_id and 'Accelerometer ID' in data.columns:
-            newdata = data[data['Accelerometer ID'].astype(str) == selected_id]
+        if selected_id and 'Accelerometer ID' in dataset.columns:
+            newdata = dataset[dataset['Accelerometer ID'].astype(str) == selected_id]
         else:
-            # If no accelerometer ID is selected or the column is missing, return the data unfiltered
-            newdata = data
+            # If no accelerometer ID is selected or the column is missing, return the dataset unfiltered
+            newdata = dataset
 
         # Check if newdata is empty after accelerometer ID filtering
         if newdata.empty:
-            print("No data found for the selected Accelerometer ID.")
-            return newdata  # Return the empty dataframe
+            return pd.DataFrame()
 
         # Calculate percentiles for each column
         percentiles = {
@@ -397,169 +505,263 @@ class PlotFFT(QWidget):
 
         return data_filtered
 
+    def plot_time_domain(self, datasets_filtered):
+        self.plot_widget_time.clear()  # Clear plot before plotting new data
+
+        # Remove existing legend if it exists
+        if hasattr(self, 'time_legend'):
+            self.plot_widget_time.removeItem(self.time_legend)
+            del self.time_legend
+
+        # Add a new legend
+        self.time_legend = self.plot_widget_time.addLegend()
+
+        for i, data_filtered in enumerate(datasets_filtered):
+            if not data_filtered.empty:
+                # Extract time and acceleration data
+                time = data_filtered['Time [microseconds]'].to_numpy() / 1e6  # Convert to seconds
+                selected_axis = self.axis_selection.currentText()  # Selected axis (e.g., X, Y, Z)
+                selected_accel = self.accel_id_selection.currentText()  # Selected accelerometer ID
+                accel_data = 9.8124 * data_filtered[selected_axis].to_numpy()  # Get selected axis data
+
+                pen = pg.mkPen(color=self.dataset_colors[i], width=1)  # Get color for dataset
+
+                # Plot each dataset and add to legend
+                plot_item = self.plot_widget_time.plot(time, accel_data, pen=pen,
+                                                       name=f"{selected_axis} - Accel {selected_accel} (Dataset {i + 1})")
+
+        # Update plot labels and title
+        if datasets_filtered:
+            selected_axis = self.axis_selection.currentText()
+            selected_accel = self.accel_id_selection.currentText()
+            self.plot_widget_time.setLabel('left', 'Acceleration (m/s²)')
+            self.plot_widget_time.setLabel('bottom', 'Time (s)')
+            self.plot_widget_time.setTitle(f"Accelerometer {selected_accel}: {selected_axis} (Time Domain)")
+        else:
+            self.plot_widget_time.clear()
+            self.plot_widget_time.setTitle("No Data Loaded")
+
+    def plot_frequency_domain(self, datasets_filtered):
+        self.plot_widget_fft.clear()
+        self.freq_list_widget.clear()
+        self.datasets_freq_data = []  # List to store frequency data for each dataset
+
+        selected_axis = self.axis_selection.currentText()
+        selected_accel = self.accel_id_selection.currentText()
+        tolerance = self.tolerance_slider.value()
+        padding_factor = self.padding_factor
+
+        # Add a legend if it doesn't already exist
+        if not hasattr(self, 'fft_legend'):
+            self.fft_legend = self.plot_widget_fft.addLegend()
+
+        # Initialize list to accumulate all natural frequencies
+        all_natural_frequencies = []
+
+        for i, data in enumerate(datasets_filtered):
+            if data.empty:
+                continue
+
+            # Extract data and compute FFT or PSD based on plot_mode
+            accel_data = 9.8124 * data[selected_axis].to_numpy()
+            time = data['Time [microseconds]'].to_numpy()
+
+            N = len(accel_data)
+            if N < 2:
+                print("Not enough data points for FFT.")
+                continue
+
+            dt = np.mean(np.diff(time)) * 1e-6  # Time difference in seconds
+            if dt <= 0:
+                print("Invalid time difference; cannot compute FFT.")
+                continue
+
+            # Apply a window function to reduce spectral leakage
+            window = np.blackman(N)
+            accel_data_windowed = accel_data * window
+
+            # Zero-padding for higher frequency resolution
+            padded_length = int(N * padding_factor)
+            accel_data_padded = np.pad(accel_data_windowed, (0, padded_length - N), mode='constant')
+
+            if self.plot_mode == "FFT":
+                # Compute FFT with zero-padded data
+                fft_accel = np.fft.fft(accel_data_padded)
+                freq = np.fft.fftfreq(len(accel_data_padded), d=dt)
+                magnitudes = np.abs(fft_accel)
+
+                # Keep only the positive half of the spectrum
+                positive_freqs = freq[:len(freq) // 2]
+                positive_magnitudes = magnitudes[:len(magnitudes) // 2]
+
+            elif self.plot_mode == "PSD":
+                # Compute PSD using Welch's method
+                freq, psd = welch(accel_data_padded, fs=1 / dt, nperseg=len(accel_data_padded))
+                positive_freqs = freq
+                positive_magnitudes = psd*100000000
+
+            # Filter out frequencies below a certain threshold
+            min_frequency = 2  # Hz
+            valid_indices = positive_freqs >= min_frequency
+            positive_freqs = positive_freqs[valid_indices]
+            positive_magnitudes = positive_magnitudes[valid_indices]
+
+            # Store frequency data for this dataset
+            self.datasets_freq_data.append({
+                'positive_freqs': positive_freqs,
+                'positive_magnitudes': positive_magnitudes
+            })
+
+            # Peak detection for this dataset
+            peaks, properties = find_peaks(positive_magnitudes, height=tolerance)
+            natural_frequencies = positive_freqs[peaks]
+            peak_magnitudes = positive_magnitudes[peaks]
+
+            # Accumulate frequencies for the frequency list
+            all_natural_frequencies.extend(natural_frequencies)
+
+            # Plot the FFT/PSD data for this dataset and add to legend
+            pen = pg.mkPen(color=self.dataset_colors[i], width=1)
+            plot_item = self.plot_widget_fft.plot(positive_freqs, positive_magnitudes, pen=pen,
+                                                  name=f"{selected_axis} - Accel {selected_accel} (Dataset {i + 1})")
+
+            # Plot the peaks (natural frequencies) as dots for this dataset
+            symbol_pen = pg.mkPen(color=self.dataset_colors[i])
+            symbol_brush = pg.mkBrush(color=self.dataset_colors[i])
+            fft_peak_item = pg.ScatterPlotItem(
+                x=natural_frequencies,
+                y=peak_magnitudes,
+                pen=symbol_pen,
+                brush=symbol_brush,
+                size=10,  # Adjust size as needed
+                symbol='o'
+            )
+            self.plot_widget_fft.addItem(fft_peak_item)
+            fft_peak_item.setZValue(10)  # Ensure the peaks appear on top
+
+        # Update the QListWidget with combined natural frequencies from all datasets
+        unique_natural_frequencies = np.unique(np.round(all_natural_frequencies, decimals=2))
+        for freq in unique_natural_frequencies:
+            self.freq_list_widget.addItem(f"{freq:.2f} Hz")
+
+        # Adjust the plot ranges to include all data
+        self.plot_widget_fft.enableAutoRange(axis='xy', enable=True)
+
+        # Update plot labels and title
+        if datasets_filtered:
+            mode_title = "FFT" if self.plot_mode == "FFT" else "PSD"
+            self.plot_widget_fft.setLabel('left', 'Magnitude')
+            self.plot_widget_fft.setLabel('bottom', 'Frequency (Hz)')
+            self.plot_widget_fft.setTitle(
+                f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)"
+            )
+        else:
+            self.plot_widget_fft.clear()
+            self.plot_widget_fft.setTitle("No Data Loaded")
+            self.freq_list_widget.clear()
+
     def setup_sliders(self):
-        # Setup the sliders based on the filtered data.
-        # This ugly fix is necessary to prevent slider values over extending thier limits.
+        min_time_global = float('inf')
+        max_time_global = float('-inf')
 
-        if self.data_filtered.empty:
-            return  # Do not set up sliders if there's no data
+        if not self.datasets:  # Handle case where datasets is empty
+            self.start_time_slider.setRange(0, 100)
+            self.end_time_slider.setRange(0, 100)
+            self.start_time_slider.setValue(0)
+            self.end_time_slider.setValue(100)
+            self.update_labels()
+            print("No datasets loaded to setup sliders.")
+            return
 
-        time_values = (self.data_filtered['Time [microseconds]'].to_numpy())/100000
-        min_time = (int(time_values[0]))
-        max_time = (int(time_values[-1]))
+        for dataset in self.datasets:  # Iterate through all loaded datasets to find global min/max time
+            if not dataset.empty:
+                time_values = (dataset['Time [microseconds]'].to_numpy()) / 100000
+                min_time_dataset = (int(time_values[0]))
+                max_time_dataset = (int(time_values[-1]))
 
-        # Set the range based on actual time values
-        self.start_time_slider.setRange(min_time, max_time)
-        self.end_time_slider.setRange(min_time, max_time)
+                min_time_global = min(min_time_global, min_time_dataset)
+                max_time_global = max(max_time_global, max_time_dataset)
 
-        # Set default values
-        self.start_time_slider.setValue(min_time)
-        self.end_time_slider.setValue(max_time)
+        if min_time_global != float('inf'):  # Check if any data was loaded to set slider ranges
+            # Set the range based on global min/max time values
+            self.start_time_slider.setRange(min_time_global, max_time_global)
+            self.end_time_slider.setRange(min_time_global, max_time_global)
 
-        # Update labels with initial values
+            # Set default values to the global range
+            self.start_time_slider.setValue(min_time_global)
+            self.end_time_slider.setValue(max_time_global)
+        else:
+            self.start_time_slider.setRange(0, 100)  # Reset to default ranges if no data
+            self.end_time_slider.setRange(0, 100)
+            self.start_time_slider.setValue(0)
+            self.end_time_slider.setValue(100)
+            print("No valid time data found in datasets to setup sliders.")
+
+        # Update labels in either case to ensure they reflect slider values
         self.update_labels()
 
-    def update_labels(self):
-        # Update the labels to show actual time values and tolerance.
-        start_time = (self.start_time_slider.value() )*100000 # Get actual time values from sliders
-        end_time = (self.end_time_slider.value() )*100000
-        tolerance_value = self.tolerance_slider.value()
-
-        # Update the labels with the actual time values
-        self.start_time_label.setText(f"Start Time: {start_time} µs")
-        self.end_time_label.setText(f"End Time: {end_time} µs")
-        self.tolerance_label.setText(f"Tolerance: {tolerance_value} dB")
-
-    def update_plot(self):
-        # Update the plots based on the current slider values.
-        if self.data.empty:
-            print("No data to plot.")
-            return
-
-        # Refilter the data based on current accelerometer ID
-        self.data_filtered = self.filter_data(self.data)
-
-        if self.data_filtered.empty:
-            print("No data available for selected accelerometer ID.")
-            return
-
-        # Get current time values from sliders
-        start_time = (self.start_time_slider.value())*100000
-        end_time = (self.end_time_slider.value())*100000
+    def on_slider_value_changed(self, value):
+        sender = self.sender()  # Get the slider that triggered the event
 
         # Update labels to reflect current slider values
         self.update_labels()
 
-        # Filter data based on time range
-        time_filtered_data = self.data_filtered[
-            (self.data_filtered['Time [microseconds]'] >= start_time) &
-            (self.data_filtered['Time [microseconds]'] <= end_time)
+        # Check if the slider is currently being dragged
+        if sender.isSliderDown():
+            # Slider is being dragged; do not update yet
+            pass
+        else:
+            # Slider is not being dragged (value changed via scroll wheel or keyboard)
+            self.slider_timer.start()
+
+    def on_slider_released(self):
+        # Stop any ongoing timer
+        self.slider_timer.stop()
+
+        # Update the plot immediately when the slider is released
+        self.update_plot()
+
+    def update_plot(self):
+        if not self.datasets:  # Check if datasets list is empty
+            print("No data to plot.")
+            return
+
+        # Refilter the data based on current accelerometer ID
+        datasets_filtered = [self.filter_data(dataset) for dataset in self.datasets]
+
+        valid_datasets_filtered = [df for df in datasets_filtered if not df.empty]  # Remove empty DataFrames from the list
+
+        if not valid_datasets_filtered:  # Check if any valid data after filtering
+            print("No data available for selected accelerometer ID across datasets.")
+            self.plot_time_domain([])  # Clear time domain plot
+            self.plot_frequency_domain([])  # Clear freq domain - pass empty list
+            self.freq_list_widget.clear()  # Clear freq list
+            return
+
+        # Get current time values from sliders (global time range)
+        start_time = (self.start_time_slider.value()) * 100000
+        end_time = (self.end_time_slider.value()) * 100000
+
+        # Update labels to reflect current slider values
+        self.update_labels()
+
+        # Filter data based on time range for each dataset, using the GLOBAL time range
+        time_filtered_datasets = []
+        for data_filtered in valid_datasets_filtered:
+            time_filtered_data = data_filtered[
+                (data_filtered['Time [microseconds]'] >= start_time) &
+                (data_filtered['Time [microseconds]'] <= end_time)
             ]
+            time_filtered_datasets.append(time_filtered_data)
 
-        if time_filtered_data.empty:
-            print("No data in selected time range.")
+        valid_time_filtered_datasets = [df for df in time_filtered_datasets if not df.empty]  # Remove empty datasets after time filter
+
+        if not valid_time_filtered_datasets:  # Check if any data remains after time filtering
+            print("No data in selected time range across datasets.")
+            self.plot_time_domain([])  # Clear time domain plot
+            self.plot_frequency_domain([])  # Clear freq domain - pass empty list
+            self.freq_list_widget.clear()  # Clear freq list
             return
 
-        self.plot_time_domain(time_filtered_data)
-
-        default_tolerance = self.tolerance_slider.value()
-        self.plot_frequency_domain(time_filtered_data, start_time, end_time, default_tolerance, self.padding_factor)
-
-    def export_data(self):
-        # Export trimmed data, frequency and magnitude data, and natural frequencies to CSV files if available.
-        if self.data_filtered.empty:
-            print("No data to export.")
-            return
-
-        # Get the current slider time range
-        start_time = self.start_time_slider.value()
-        end_time = self.end_time_slider.value()
-
-        # Print out the time range for debugging
-        print(f"Start time: {start_time*100000}, End time: {end_time*100000}")
-
-        # Filter the data within the selected time range
-        trimmed_data = self.data_filtered[
-            (self.data_filtered['Time [microseconds]'] >= start_time*100000) &
-            (self.data_filtered['Time [microseconds]'] <= end_time*100000)
-            ]
-
-        # If the trimmed data is empty, print a message and exit
-        if trimmed_data.empty:
-            print("No data found within the selected time range.")
-            return
-
-        # Show file dialog to select where to save the CSV files
-        file_dialog = QFileDialog()
-        file_base_path, _ = file_dialog.getSaveFileName(self, "Save CSV", "", "CSV Files (*.csv)")
-
-        if file_base_path:
-            # Export trimmed time-range data
-            trimmed_data_path = f"{file_base_path}_trimmed_data.csv"
-            trimmed_data.to_csv(trimmed_data_path, index=False)
-            print(f"Trimmed acceleration data exported to {trimmed_data_path}.")
-
-            # Export frequency and magnitude data
-            if hasattr(self, 'positive_freqs') and hasattr(self, 'positive_magnitudes_dB'):
-                # Ensure both frequency and magnitude arrays are of the same length
-                if len(self.positive_freqs) == len(self.positive_magnitudes_dB):
-                    freq_magnitude_data = pd.DataFrame({
-                        "Frequency (Hz)": self.positive_freqs,
-                        "Magnitude (dB)": self.positive_magnitudes_dB
-                    })
-                    freq_magnitude_path = f"{file_base_path}_frequency_magnitude.csv"
-                    freq_magnitude_data.to_csv(freq_magnitude_path, index=False)
-                    print(f"Frequency and magnitude data exported to {freq_magnitude_path}.")
-                else:
-                    print("Warning: Frequency and magnitude data arrays have mismatched lengths.")
-            else:
-                print("Frequency and magnitude data are not available for export.")
-
-            # Export only selected natural frequencies if available
-            if hasattr(self, 'natural_frequencies') and self.natural_frequencies.size > 0:
-                # Get the selected natural frequencies from the QListWidget
-                selected_items = self.freq_list_widget.selectedItems()
-                selected_freqs = [float(item.text().split()[0]) for item in selected_items]
-
-                if selected_freqs:
-                    # Filter the natural frequencies and corresponding magnitudes based on selected frequencies
-                    selected_indices = [np.abs(self.natural_frequencies - freq).argmin() for freq in selected_freqs]
-                    selected_magnitudes = self.peak_magnitudes[selected_indices]
-                    selected_natural_freqs = self.natural_frequencies[selected_indices]
-
-                    # Ensure both arrays have matching lengths
-                    if len(selected_natural_freqs) == len(selected_magnitudes):
-                        natural_freq_data = pd.DataFrame({
-                            "Natural Frequency (Hz)": selected_natural_freqs,
-                            "Magnitude (dB)": selected_magnitudes
-                        })
-                        natural_freq_path = f"{file_base_path}_selected_natural_frequencies.csv"
-                        natural_freq_data.to_csv(natural_freq_path, index=False)
-                        print(f"Selected natural frequencies exported to {natural_freq_path}.")
-                    else:
-                        print("Warning: Mismatched lengths between selected frequencies and magnitudes.")
-                else:
-                    print("No natural frequencies selected for export.")
-            else:
-                print("Natural frequency data is not available for export.")
-
-    def open_csv(self):
-        # Open a file dialog to select and load a CSV file.
-        file_dialog = QFileDialog()
-        file_path, _ = file_dialog.getOpenFileName(self, "Open CSV", "", "CSV Files (*.csv)")
-
-        if file_path:
-            self.data = self.load_data(file_path)
-            self.data_filtered = self.filter_data(self.data)
-
-            if not self.data_filtered.empty:
-                self.setup_sliders()
-                self.plot_time_domain(self.data_filtered)
-
-                default_tolerance = self.tolerance_slider.value()
-                self.plot_frequency_domain(self.data_filtered,
-                                           self.start_time_slider.value(),
-                                           self.end_time_slider.value(),
-                                           default_tolerance)
-            else:
-                print("No data available after filtering.")
+        self.plot_time_domain(valid_time_filtered_datasets)  # Pass the list of datasets
+        self.plot_frequency_domain(valid_time_filtered_datasets)  # Pass the list to freq domain as well, no time range needed here as it uses full data for FFT/PSD
