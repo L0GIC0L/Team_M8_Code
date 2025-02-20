@@ -1,6 +1,3 @@
-import os
-import re
-
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
@@ -147,17 +144,24 @@ class PlotFFT(QWidget):
 
         # Create the right layout (QListWidget)
         right_layout = QVBoxLayout()
+
+        # Frequency List Widget
         self.freq_list_widget = QListWidget()
         self.freq_list_widget.setSelectionMode(QListWidget.MultiSelection)  # Allow multiple selections
         self.freq_list_widget.addItem("Awaiting Data...")
-        self.freq_list_widget.setMinimumWidth(125)  # Set your desired minimum width here (in pixels)
+        self.freq_list_widget.setMinimumWidth(125)  # Set minimum width
 
-        # Add the QListWidget to the right layout
         right_layout.addWidget(self.freq_list_widget)
 
+        # Create a QLabel for frequency information
+        self.freq_info_label = QLabel("Freq: -- Hz\n1/dt: -- Hz")
+        self.freq_info_label.setAlignment(Qt.AlignCenter)  # Align text to the right
+
+        right_layout.addWidget(self.freq_info_label)  # Add label to the right layout
+
         # Add the left and right layouts to the main layout
-        main_layout.addLayout(left_layout, 3)  # Left layout takes 3 parts of the space
-        main_layout.addLayout(right_layout, 1)  # Right layout takes 1 part of the space
+        main_layout.addLayout(left_layout, 3)  # Left layout takes 3 parts of space
+        main_layout.addLayout(right_layout, 1)  # Right layout takes 1 part of space
 
         # Set the layout to the main widget
         self.setLayout(main_layout)
@@ -571,7 +575,8 @@ class PlotFFT(QWidget):
                 print("Not enough data points for FFT.")
                 continue
 
-            dt = np.mean(np.diff(time)) * 1e-6  # Time difference in seconds
+            dt = np.mean(np.diff(time)) * 1e-6  # Time difference in microseconds
+
             if dt <= 0:
                 print("Invalid time difference; cannot compute FFT.")
                 continue
@@ -595,10 +600,22 @@ class PlotFFT(QWidget):
                 positive_magnitudes = magnitudes[:len(magnitudes) // 2]
 
             elif self.plot_mode == "PSD":
-                # Compute PSD using Welch's method
-                freq, psd = welch(accel_data_padded, fs=1 / dt, nperseg=len(accel_data_padded))
+                # Use padded data as required
+                padded_length = len(accel_data_padded)
+
+                # Dynamically compute segment length: use a fraction of padded_length.
+                dynamic_factor = 1  # Adjust this factor as needed.
+
+                nperseg = int(padded_length / dynamic_factor) if padded_length >= dynamic_factor else padded_length
+                noverlap = int(nperseg / 2)  # Typically, 50% overlap works well.
+
+                # Compute PSD using Welch's method with a standard window (Hann is common)
+                freq, psd = welch(accel_data_padded, fs=1 / dt, window='hann', nperseg=nperseg, noverlap=noverlap)
                 positive_freqs = freq
-                positive_magnitudes = psd*100000000
+
+                # Convert to dB without extra scaling; adjust if you need a specific offset.
+                positive_magnitudes = psd*5e6
+
 
             # Filter out frequencies below a certain threshold
             min_frequency = 2  # Hz
@@ -640,9 +657,9 @@ class PlotFFT(QWidget):
             fft_peak_item.setZValue(10)  # Ensure the peaks appear on top
 
         # Update the QListWidget with combined natural frequencies from all datasets
-        unique_natural_frequencies = np.unique(np.round(all_natural_frequencies, decimals=2))
+        unique_natural_frequencies = np.unique(np.round(all_natural_frequencies, decimals=4))
         for freq in unique_natural_frequencies:
-            self.freq_list_widget.addItem(f"{freq:.2f} Hz")
+            self.freq_list_widget.addItem(f"{freq:.4f} Hz")
 
         # Adjust the plot ranges to include all data
         self.plot_widget_fft.enableAutoRange(axis='xy', enable=True)
@@ -655,6 +672,11 @@ class PlotFFT(QWidget):
             self.plot_widget_fft.setTitle(
                 f"Accelerometer {selected_accel}: {selected_axis} {mode_title} (Frequency Domain)"
             )
+
+            # Inside plot_frequency_domain, after computing dt and freq:
+            sampling_freq = 1 / dt  # Compute the sampling frequency
+            self.freq_info_label.setText(f"Freq: {dt:.10f} Hz\n1/dt: {sampling_freq:.4f} Hz")
+
         else:
             self.plot_widget_fft.clear()
             self.plot_widget_fft.setTitle("No Data Loaded")

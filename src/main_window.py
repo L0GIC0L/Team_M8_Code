@@ -1,5 +1,3 @@
-import sys
-
 from PySide6.QtWidgets import QMainWindow, QApplication, QTabWidget,QToolTip
 from PySide6.QtGui import QFont
 

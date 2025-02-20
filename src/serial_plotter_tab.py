@@ -8,7 +8,6 @@ from pglive.sources.live_plot_widget import LivePlotWidget
 from data_recorder import DataRecorder
 from serial_reader import SerialReader
 
-
 class SerialPlotterTab(QWidget):
     def __init__(self):
         super().__init__()
