@@ -28,7 +28,7 @@ class SerialReader(QThread):
         print(f"Port set to {port_name}")
         self.start_serial()
 
-    def set_speed(self, speed="400"):
+    def set_speed(self, speed="1000"):
         if self.serial.write((str(speed) + '\n').encode()) and self.serial.isOpen():
             print(f"Successfully changed speed to {speed}.")
         else:

@@ -12,6 +12,9 @@ class SerialPlotterTab(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.impact_signal_connected = False
+        self.auto_recording_signal_connected = False
+
         self.setWindowTitle("Real-Time Accelerometer Viewer")
         self.setGeometry(100, 100, 600, 600)
 
@@ -36,7 +39,7 @@ class SerialPlotterTab(QWidget):
         self.current_port_index = 0  # Default to the second port in the list
 
         self.communication_speeds = [0, 100, 200, 300, 400, 450, 500, 550, 600, 650, 700, 750, 800, 850, 900, 950, 1000, 2000, 4000, 8000, 10000, 100000]
-        self.selected_speed_index = 0
+        self.selected_speed_index = 16
 
         self.data_recorder = DataRecorder()  # Create an instance of DataRecorder
         self.data_recorder.start()
@@ -120,10 +123,16 @@ class SerialPlotterTab(QWidget):
         self.record_button.setStyleSheet("background-color: #2C6E49; color: white;")
         content_layout.addWidget(self.record_button, 7, 0, 1, 2)
 
+        # Start Auto Recording button
+        self.auto_record_button = QPushButton("Start Auto")
+        self.auto_record_button.clicked.connect(self.toggle_auto_recording)
+        self.auto_record_button.setStyleSheet("background-color: #2B4162; color: white;")
+        content_layout.addWidget(self.auto_record_button, 8, 0, 1, 2)
+
         # Export Data button
         self.export_button = QPushButton("Export Data")
         self.export_button.clicked.connect(self.export_data)
-        content_layout.addWidget(self.export_button, 8, 0, 1, 2)
+        content_layout.addWidget(self.export_button, 9, 0, 1, 2)
 
         # Finalize the scroll area
         scroll_area.setWidget(content_widget)
@@ -240,7 +249,13 @@ class SerialPlotterTab(QWidget):
 
     def update_data_buffers(self, sensor_id, timeus, accel_x, accel_y, accel_z):
         sensor_id = int(sensor_id)  # Convert sensor_id to int
-        self.data_recorder.record_data(timeus, sensor_id, accel_x, accel_y, accel_z)  # Record the data
+
+        # Always handle auto recording logic
+        self.data_recorder.auto_record_data(timeus, sensor_id, accel_x, accel_y, accel_z)
+
+        # If recording is active (either manual or auto), record data
+        if self.data_recorder.recording:
+            self.data_recorder.record_data(timeus, sensor_id, accel_x, accel_y, accel_z)
 
         # Append data to the corresponding live plot connectors
         self.data_connectors[(sensor_id, 'X')].cb_append_data_point(accel_x, x=timeus)
@@ -249,19 +264,18 @@ class SerialPlotterTab(QWidget):
 
     def toggle_plotting(self, state):
         if state == 0:  # 0 means unchecked
-            print("Stopping plot updates...")  # Debugging line
+            print("Stopping plot updates...")
             for connector in self.data_connectors.values():
                 connector.clear()  # Clear the data if needed
                 connector.pause()
         elif state == 2:  # 2 means checked
-            print("Starting plot updates...")  # Debugging line
+            print("Starting plot updates...")
             for connector in self.data_connectors.values():
                 connector.resume()
 
     def toggle_recording(self):
         if self.record_button.text() == "Start Recording":
             self.toggle_plotting(0)
-
             # Start recording
             self.data_recorder.start_recording()
             self.record_button.setText("Stop Recording")
@@ -272,7 +286,54 @@ class SerialPlotterTab(QWidget):
             self.data_recorder.stop_recording()
             self.record_button.setText("Start Recording")
             self.record_button.setStyleSheet("background-color: #2C6E49; color: white;")
-            self.data_recorder.export_default()
+            self.data_recorder.export_data("default")
+            self.data_recorder.export_data("data")
+            self.data_recorder.data_records.clear()
+
+    def toggle_auto_recording(self):
+        if self.auto_record_button.text() == "Start Auto":
+            self.toggle_plotting(0)
+            self.data_recorder.start_auto_recording()
+            self.auto_record_button.setText("Stop Auto")
+            self.auto_record_button.setStyleSheet("background-color: #650D1B; color: white;")
+
+            # Safe connection
+            try:
+                if not self.impact_signal_connected:
+                    self.data_recorder.impact_detected_signal.connect(self.on_impact_detected)
+                    self.impact_signal_connected = True
+
+                if not self.auto_recording_signal_connected:
+                    self.data_recorder.auto_recording_stopped.connect(self.on_auto_recording_stopped)
+                    self.auto_recording_signal_connected = True
+
+            except Exception as e:
+                print(f"Error connecting signals: {e}")
+
+        else:
+            self.toggle_plotting(2)
+            self.data_recorder.stop_auto_recording()
+            self.auto_record_button.setText("Start Auto")
+            self.auto_record_button.setStyleSheet("background-color: #2B4162; color: white;")
+
+            # Safe disconnection
+            try:
+                if self.impact_signal_connected:
+                    self.data_recorder.impact_detected_signal.disconnect(self.on_impact_detected)
+                    self.impact_signal_connected = False
+
+                if self.auto_recording_signal_connected:
+                    self.data_recorder.auto_recording_stopped.disconnect(self.on_auto_recording_stopped)
+                    self.auto_recording_signal_connected = False
+
+            except Exception as e:
+                print(f"Error disconnecting signals: {e}")
+
+    def on_impact_detected(self):
+        self.auto_record_button.setStyleSheet("background-color: #FF0000; color: white;")
+
+    def on_auto_recording_stopped(self):
+        self.auto_record_button.setStyleSheet("background-color: #650D1B; color: white;")
 
     def export_data(self):
         self.data_recorder.export_data()

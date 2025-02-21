@@ -487,27 +487,7 @@ class PlotFFT(QWidget):
         if newdata.empty:
             return pd.DataFrame()
 
-        # Calculate percentiles for each column
-        percentiles = {
-            'time': newdata['Time [microseconds]'].quantile([0.005, 0.995]),
-            'x_accel': newdata['X Acceleration'].quantile([0.005, 0.995]),
-            'y_accel': newdata['Y Acceleration'].quantile([0.005, 0.995]),
-            'z_accel': newdata['Z Acceleration'].quantile([0.005, 0.995]),
-        }
-
-        # Apply filtering conditions based on the calculated percentiles
-        data_filtered = newdata[
-            (newdata['Time [microseconds]'] >= percentiles['time'].iloc[0]) &
-            (newdata['Time [microseconds]'] <= percentiles['time'].iloc[1]) &
-            (newdata['X Acceleration'] >= percentiles['x_accel'].iloc[0]) &
-            (newdata['X Acceleration'] <= percentiles['x_accel'].iloc[1]) &
-            (newdata['Y Acceleration'] >= percentiles['y_accel'].iloc[0]) &
-            (newdata['Y Acceleration'] <= percentiles['y_accel'].iloc[1]) &
-            (newdata['Z Acceleration'] >= percentiles['z_accel'].iloc[0]) &
-            (newdata['Z Acceleration'] <= percentiles['z_accel'].iloc[1])
-            ]
-
-        return data_filtered
+        return newdata
 
     def plot_time_domain(self, datasets_filtered):
         self.plot_widget_time.clear()  # Clear plot before plotting new data
@@ -604,17 +584,17 @@ class PlotFFT(QWidget):
                 padded_length = len(accel_data_padded)
 
                 # Dynamically compute segment length: use a fraction of padded_length.
-                dynamic_factor = 1  # Adjust this factor as needed.
+                dynamic_factor = 2  # Adjust this factor as needed.
 
                 nperseg = int(padded_length / dynamic_factor) if padded_length >= dynamic_factor else padded_length
                 noverlap = int(nperseg / 2)  # Typically, 50% overlap works well.
 
                 # Compute PSD using Welch's method with a standard window (Hann is common)
-                freq, psd = welch(accel_data_padded, fs=1 / dt, window='hann', nperseg=nperseg, noverlap=noverlap)
+                freq, psd = welch(accel_data_padded, fs=1 / dt, window='blackman', nperseg=nperseg, noverlap=noverlap)
                 positive_freqs = freq
 
                 # Convert to dB without extra scaling; adjust if you need a specific offset.
-                positive_magnitudes = psd*5e6
+                positive_magnitudes = psd*10**(padding_factor)
 
 
             # Filter out frequencies below a certain threshold
@@ -657,9 +637,9 @@ class PlotFFT(QWidget):
             fft_peak_item.setZValue(10)  # Ensure the peaks appear on top
 
         # Update the QListWidget with combined natural frequencies from all datasets
-        unique_natural_frequencies = np.unique(np.round(all_natural_frequencies, decimals=4))
+        unique_natural_frequencies = np.unique(np.round(all_natural_frequencies, decimals=2))
         for freq in unique_natural_frequencies:
-            self.freq_list_widget.addItem(f"{freq:.4f} Hz")
+            self.freq_list_widget.addItem(f"{freq:.2f} Hz")
 
         # Adjust the plot ranges to include all data
         self.plot_widget_fft.enableAutoRange(axis='xy', enable=True)
