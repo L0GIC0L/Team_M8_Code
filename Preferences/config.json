@@ -21,6 +21,6 @@
         true,
         true
     ],
-    "striker_configuration": "Right",
+    "striker_configuration": "Left",
     "sensor_configuration": "A"
 }

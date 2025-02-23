@@ -52,7 +52,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Error loading stylesheet: {e}")
 
-
 # Main application entry
 if __name__ == "__main__":
     import sys
@@ -61,4 +60,3 @@ if __name__ == "__main__":
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
-
