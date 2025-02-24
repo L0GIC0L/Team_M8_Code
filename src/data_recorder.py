@@ -13,8 +13,6 @@ import pandas as pd
 
 from fft_analysis_tab import PlotFFT, process_frequency_data, detect_peaks
 
-TOLERANCE = 300
-
 class DataRecorder(QThread):
     recording_started = Signal()
     recording_stopped = Signal()
@@ -31,9 +29,29 @@ class DataRecorder(QThread):
         self.impact_detected_time = None
         self.auto_record_start_time = None
         self.delay_timer = None  # Timer for delayed recording start
-        self.recording_duration = 10  # Duration for auto recording in seconds
-        self.last_saved_file = None
+        self.stop_timer = None   # Timer to stop recording after duration
+
+        # Load configuration settings from config.json
+        config_path = os.path.expanduser("../Preferences/config.json")
+        try:
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            print("Failed to load config, using defaults. Error:", e)
+            config = {}
+
+        # Use the settings from config; note that these values come from the UI.
+        # recording_delay and recording_duration are assumed to be in milliseconds.
+        self.detection_tolerance = config.get("detection_tolerance", 0.8)  # Used for FFT peak detection
+        self.hit_threshold = config.get("hit_threshold", 0.5)              # Threshold for impact detection
+        self.recording_delay = config.get("recording_delay", 3000)           # Delay (ms) before auto recording starts
+        self.recording_duration = config.get("recording_duration", 5000)     # Auto recording duration (ms)
+
         self.plot_fft_instance = PlotFFT()  # Initialize plotFFT instance
+
+        print(f"DataRecorder settings loaded: detection_tolerance={self.detection_tolerance}, "
+              f"hit_threshold={self.hit_threshold}, recording_delay={self.recording_delay}, "
+              f"recording_duration={self.recording_duration}")
 
     def run(self):
         # No need to call exec_() here unless using an event loop
@@ -57,7 +75,9 @@ class DataRecorder(QThread):
         self.recording = False
         self.impact_detected_time = None
         self.auto_record_start_time = None
-        self.delay_timer = None
+        if self.delay_timer is not None:
+            self.delay_timer.stop()
+            self.delay_timer = None
         self.auto_recording_started.emit()
         print("Auto Recording Mode Enabled...")
 
@@ -68,6 +88,9 @@ class DataRecorder(QThread):
         if self.delay_timer is not None:
             self.delay_timer.stop()
             self.delay_timer = None
+        if self.stop_timer is not None:
+            self.stop_timer.stop()
+            self.stop_timer = None
         self.auto_recording_stopped.emit()
         print("Auto Recording Mode Disabled...")
 
@@ -77,17 +100,18 @@ class DataRecorder(QThread):
 
         magnitude = math.sqrt(accel_x ** 2 + accel_y ** 2 + accel_z ** 2)
 
-        # Detect impact and initiate pending state
-        if not self.recording and not self.auto_pending and magnitude >= 3:
+        # Use hit_threshold setting to determine if an impact occurred.
+        if not self.recording and not self.auto_pending and magnitude >= self.hit_threshold:
             self.auto_pending = True
             self.impact_detected_signal.emit()
-            print("Impact detected! Waiting 10 seconds to start auto recording.")
+            print(f"Impact detected (magnitude {magnitude:.2f} >= threshold {self.hit_threshold})! "
+                  f"Waiting {self.recording_delay} ms to start auto recording.")
 
-            # Start a QTimer to handle the delay before recording
+            # Start a QTimer to wait before starting auto recording.
             self.delay_timer = QTimer()
             self.delay_timer.setSingleShot(True)
             self.delay_timer.timeout.connect(self.start_delayed_recording)
-            self.delay_timer.start(3000)  # Delay in milliseconds (10 seconds)
+            self.delay_timer.start(self.recording_delay)
 
     def start_delayed_recording(self):
         self.recording = True
@@ -95,16 +119,16 @@ class DataRecorder(QThread):
         self.auto_record_start_time = datetime.now()
         print("Auto recording started after delay.")
 
-        # Start a QTimer to stop recording after the specified duration
+        # Start a QTimer to stop recording after the specified duration.
         self.stop_timer = QTimer()
         self.stop_timer.setSingleShot(True)
         self.stop_timer.timeout.connect(self.stop_auto_recording_session)
-        self.stop_timer.start(self.recording_duration * 1000)  # Duration in milliseconds
+        self.stop_timer.start(self.recording_duration)
 
     def stop_auto_recording_session(self):
         self.recording = False
-        print(f"Auto recording ended after {self.recording_duration} seconds.")
-        # Use the "preset" mode for exporting as before
+        print(f"Auto recording ended after {self.recording_duration} ms.")
+        # Export data using preset modes as before.
         self.export_data("preset")
         self.export_data("modes")
         self.data_records.clear()
@@ -184,7 +208,6 @@ class DataRecorder(QThread):
                                     columns=["Time [microseconds]", "Accelerometer ID", "X Acceleration",
                                              "Y Acceleration", "Z Acceleration"])
                 modes_data = []
-                # Process each sensor and axis using the new global functions.
                 for sensor_id in data["Accelerometer ID"].unique():
                     sensor_data = data[data["Accelerometer ID"] == sensor_id]
                     for axis in ["X Acceleration", "Y Acceleration", "Z Acceleration"]:
@@ -198,10 +221,10 @@ class DataRecorder(QThread):
                             positive_freqs = freq_data["positive_freqs"]
                             positive_magnitudes = freq_data["positive_magnitudes"]
 
-                            natural_frequencies, _ = detect_peaks(positive_freqs, positive_magnitudes, TOLERANCE )
+                            # Use the loaded detection_tolerance setting for peak detection.
+                            natural_frequencies, _ = detect_peaks(positive_freqs, positive_magnitudes, self.detection_tolerance)
                             for freq in natural_frequencies:
                                 modes_data.append([sensor_id, axis, freq])
-                # Merge the modes and export as a CSV.
                 freq_dict = {}
                 for sensor_id, axis, freq in modes_data:
                     if freq not in freq_dict:
@@ -210,7 +233,8 @@ class DataRecorder(QThread):
                     freq_dict[freq]["axes"].add(axis)
                 combined_modes = []
                 mode_number = 1
-                for freq, values in freq_dict.items():
+                sorted_freqs = sorted(freq_dict.items())
+                for freq, values in sorted_freqs:
                     sensor_ids = ", ".join(map(str, sorted(values["sensor_ids"])))
                     axes = "".join(sorted([axis[0] for axis in values["axes"]])) + " Acceleration"
                     combined_modes.append([mode_number, freq, sensor_ids, axes])
@@ -232,7 +256,6 @@ class DataRecorder(QThread):
             print(f"Error exporting data: {e}")
             QMessageBox.warning(None, "Export Error", "Failed to export data.")
 
-        # If mode is preset, automatically process the FFT from the exported CSV.
         if mode == "preset":
             self.compute_fft_preset(file_path)
 
@@ -251,7 +274,6 @@ class DataRecorder(QThread):
                     axis_data = sensor_data[['Time [microseconds]', axis]].copy()
                     print("Processing {} for sensor {}".format(axis, sensor_id))
                     print(axis_data.head())
-                    # Use the global process_frequency_data function
                     processed = process_frequency_data(
                         [axis_data], axis,
                         self.plot_fft_instance.padding_factor,
@@ -265,7 +287,6 @@ class DataRecorder(QThread):
                             'positive_freqs': freq_data['positive_freqs'],
                             'positive_magnitudes': freq_data['positive_magnitudes']
                         })
-                        # Export FFT data for debugging
                         df_fft = pd.DataFrame({
                             "Frequency (Hz)": freq_data['positive_freqs'],
                             "Magnitude": freq_data['positive_magnitudes']
@@ -283,8 +304,7 @@ class DataRecorder(QThread):
             for ds in datasets_filtered:
                 pos_freqs = ds["positive_freqs"]
                 pos_mags = ds["positive_magnitudes"]
-                # Use a tolerance of 20 (adjust as needed)
-                natural_freqs, _ = detect_peaks(pos_freqs, pos_mags, TOLERANCE)
+                natural_freqs, _ = detect_peaks(pos_freqs, pos_mags, self.detection_tolerance)
                 all_natural_frequencies.extend(natural_freqs)
             unique_freqs = np.unique(np.round(all_natural_frequencies, decimals=2))
             print("Detected Natural Frequencies:")

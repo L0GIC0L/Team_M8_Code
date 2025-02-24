@@ -22,5 +22,9 @@
         true
     ],
     "striker_configuration": "Left",
-    "sensor_configuration": "A"
+    "sensor_configuration": "A",
+    "detection_tolerance": 200.0,
+    "hit_threshold": 3.0,
+    "recording_delay": 3000,
+    "recording_duration": 10000
 }
