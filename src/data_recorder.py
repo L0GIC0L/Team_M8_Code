@@ -42,10 +42,10 @@ class DataRecorder(QThread):
 
         # Use the settings from config; note that these values come from the UI.
         # recording_delay and recording_duration are assumed to be in milliseconds.
-        self.detection_tolerance = config.get("detection_tolerance", 0.8)  # Used for FFT peak detection
-        self.hit_threshold = config.get("hit_threshold", 0.5)              # Threshold for impact detection
+        self.detection_tolerance = config.get("detection_tolerance", 230)  # Used for FFT peak detection
+        self.hit_threshold = config.get("hit_threshold", 3)              # Threshold for impact detection
         self.recording_delay = config.get("recording_delay", 3000)           # Delay (ms) before auto recording starts
-        self.recording_duration = config.get("recording_duration", 5000)     # Auto recording duration (ms)
+        self.recording_duration = config.get("recording_duration", 10000)     # Auto recording duration (ms)
 
         self.plot_fft_instance = PlotFFT()  # Initialize plotFFT instance
 
@@ -227,18 +227,28 @@ class DataRecorder(QThread):
                                 modes_data.append([sensor_id, axis, freq])
                 freq_dict = {}
                 for sensor_id, axis, freq in modes_data:
-                    if freq not in freq_dict:
-                        freq_dict[freq] = {"sensor_ids": set(), "axes": set()}
-                    freq_dict[freq]["sensor_ids"].add(sensor_id)
-                    freq_dict[freq]["axes"].add(axis)
+                    grouped = False
+                    for key in list(freq_dict.keys()):
+                        if abs(freq - key) <= 0.008:  # 0.008 Hz tolerance
+                            freq_dict[key]["sensor_ids"].add(sensor_id)
+                            freq_dict[key]["axes"].add(axis)
+                            freq_dict[key]["values"].append(freq)  # Store values for averaging
+                            grouped = True
+                            break
+                    if not grouped:
+                        freq_dict[freq] = {"sensor_ids": {sensor_id}, "axes": {axis}, "values": [freq]}
+
                 combined_modes = []
                 mode_number = 1
                 sorted_freqs = sorted(freq_dict.items())
-                for freq, values in sorted_freqs:
+
+                for _, values in sorted_freqs:
+                    avg_freq = round(np.mean(values["values"]), 3)  # Average the grouped frequencies
                     sensor_ids = ", ".join(map(str, sorted(values["sensor_ids"])))
                     axes = "".join(sorted([axis[0] for axis in values["axes"]])) + " Acceleration"
-                    combined_modes.append([mode_number, freq, sensor_ids, axes])
+                    combined_modes.append([mode_number, avg_freq, sensor_ids, axes])
                     mode_number += 1
+
                 modes_df = pd.DataFrame(combined_modes,
                                         columns=["Mode Number", "Natural Frequency (Hz)", "Sensor ID", "Axis"])
                 modes_df.to_csv(file_path, index=False)
@@ -292,7 +302,7 @@ class DataRecorder(QThread):
                             "Magnitude": freq_data['positive_magnitudes']
                         })
                         debug_filename = f"FFT_Sensor_{sensor_id}_{axis.replace(' ', '_')}.csv"
-                        debug_folder = Path.cwd() / "Preset_Samples" / "Debug_FFTs"
+                        debug_folder = Path.cwd() / "../Preset_Samples" / "Debug_FFTs"
                         debug_folder.mkdir(parents=True, exist_ok=True)
                         debug_path = debug_folder / debug_filename
                         df_fft.to_csv(debug_path, index=False)
