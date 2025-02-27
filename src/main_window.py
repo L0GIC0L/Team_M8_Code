@@ -5,6 +5,7 @@ from csv_combiner_tab import CSVCombinerWidget
 from fft_analysis_tab import PlotFFT
 from serial_plotter_tab import SerialPlotterTab
 from settings_tab import Settings, load_stylesheet
+from comparison_tab import CSVFrequencyComparator
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -25,6 +26,9 @@ class MainWindow(QMainWindow):
         # Add CSV Combiner tab
         self.csvcombiner = CSVCombinerWidget()
         self.tab_widget.addTab(self.csvcombiner, "CSV Combiner")
+
+        self.comparisontool = CSVFrequencyComparator()
+        self.tab_widget.addTab(self.comparisontool,"CSV Comparison")
 
         # Add Settings tab
         self.settings = Settings(self.plot_fft, self.plot_serial)  # Assuming Settings is defined elsewhere
